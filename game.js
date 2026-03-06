@@ -66,6 +66,21 @@ let capturedPieces = { red: [], black: [] };
 let lastCapturedCount = { red: 0, black: 0 };
 let pendingCaptureFly = null; // { startRect: DOMRect, piece } for fly-from-board animation
 
+// 頁面載入時就初始化 Firebase，確保點「建立遊戲」時連線已就緒
+(function initFirebaseEarly() {
+  if (typeof window === "undefined" || !window.firebaseConfig || !window.firebase) return;
+  try {
+    window.firebase.initializeApp(window.firebaseConfig);
+    window._firestoreDb = window.firebase.firestore();
+  } catch (e) {
+    if (e.code === "app/duplicate-app" || (e.message && e.message.indexOf("already exists") !== -1)) {
+      try {
+        window._firestoreDb = window.firebase.firestore();
+      } catch (_) {}
+    }
+  }
+})();
+
 function isGameStarted() {
   return !!(playerColors[1] && playerColors[2]);
 }
@@ -182,21 +197,13 @@ function pieceFromSerializable(s) {
 }
 
 function getSerializedState() {
-  // Firestore 不支援巢狀陣列，因此將棋盤儲存為物件（key: "r_c"）。
-  const boardSer = {};
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const cell = board[r]?.[c];
-      const key = `${r}_${c}`;
-      boardSer[key] = { p: pieceToSerializable(cell?.piece) };
-    }
-  }
+  const boardSer = board.map((row) =>
+    row.map((cell) => ({ p: pieceToSerializable(cell?.piece) }))
+  );
   const capturedRed = capturedPieces.red.map(pieceToSerializable).filter(Boolean);
   const capturedBlack = capturedPieces.black.map(pieceToSerializable).filter(Boolean);
   return {
     board: boardSer,
-    rows: ROWS,
-    cols: COLS,
     activePlayer,
     playerColors: { 1: playerColors[1], 2: playerColors[2] },
     moveHistory: moveHistory.slice(),
@@ -211,57 +218,25 @@ function getSerializedState() {
 function setStateFromSerialized(data) {
   if (!data || !data.board) return;
   const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
-  // 兼容舊版（2D 陣列）、中間版（一維陣列）與新版（物件 key: "r_c"）儲存格式。
-  const makeCell = (cell) => {
-    const p = cell?.p;
-    return {
-      piece: p
-        ? (() => {
-            const t = typeInfo(p.t);
-            return {
-              type: p.t,
-              color: p.c,
-              faceUp: !!p.f,
-              name: t?.name ?? p.t,
-              short: t?.short ?? "?",
-              rank: t?.rank ?? 0,
-              captured: false,
-            };
-          })()
-        : null,
-    };
-  };
-
-  if (Array.isArray(data.board)) {
-    if (Array.isArray(data.board[0])) {
-      // 最舊格式：二維陣列 [row][col]
-      board = data.board.map((row) => row.map((cell) => makeCell(cell)));
-    } else {
-      // 中間格式：一維陣列，長度 ROWS * COLS
-      const flat = data.board;
-      board = [];
-      let idx = 0;
-      for (let r = 0; r < ROWS; r++) {
-        const row = [];
-        for (let c = 0; c < COLS; c++) {
-          row.push(makeCell(flat[idx++]));
-        }
-        board.push(row);
-      }
-    }
-  } else {
-    // 新格式：物件，key 為 "r_c"
-    const obj = data.board || {};
-    board = [];
-    for (let r = 0; r < ROWS; r++) {
-      const row = [];
-      for (let c = 0; c < COLS; c++) {
-        const key = `${r}_${c}`;
-        row.push(makeCell(obj[key] || null));
-      }
-      board.push(row);
-    }
-  }
+  board = data.board.map((row) =>
+    row.map((cell) => {
+      const p = cell?.p;
+      return {
+        piece: p ? (() => {
+          const t = typeInfo(p.t);
+          return {
+            type: p.t,
+            color: p.c,
+            faceUp: !!p.f,
+            name: t?.name ?? p.t,
+            short: t?.short ?? "?",
+            rank: t?.rank ?? 0,
+            captured: false,
+          };
+        })() : null,
+      };
+    })
+  );
   activePlayer = data.activePlayer ?? 1;
   playerColors[1] = data.playerColors?.[1] ?? null;
   playerColors[2] = data.playerColors?.[2] ?? null;
@@ -283,34 +258,18 @@ function setStateFromSerialized(data) {
 }
 
 function getFirestore() {
-  // Support either `window.firebaseConfig = {...}` or `const firebaseConfig = {...}` in a plain script.
-  let cfg = window.firebaseConfig;
-  if (!cfg) {
-    try {
-      // eslint-disable-next-line no-undef
-      if (typeof firebaseConfig !== "undefined") cfg = firebaseConfig;
-    } catch (_) {
-      // ignore
-    }
-  }
-  if (!cfg) {
-    console.warn(
-      "Firebase: firebase-config.js 未載入或未提供設定。請確定檔案內容是 `window.firebaseConfig = {...}`（不要包含 import / initializeApp）。"
-    );
-    return null;
-  }
-  if (!window.firebase?.firestore) {
-    console.warn("Firebase: SDK 未載入（window.firebase 或 firestore 不存在），請檢查網路或是否被擴充功能阻擋。");
-    return null;
-  }
+  if (!window.firebaseConfig || !window.firebase?.firestore) return null;
   if (!window._firestoreDb) {
     try {
-      window.firebaseConfig = cfg;
-      window.firebase.initializeApp(cfg);
+      window.firebase.initializeApp(window.firebaseConfig);
       window._firestoreDb = window.firebase.firestore();
     } catch (e) {
-      console.warn("Firebase init failed", e);
-      return null;
+      if (e.code === "app/duplicate-app" || (e.message && e.message.indexOf("already exists") !== -1)) {
+        window._firestoreDb = window.firebase.firestore();
+      } else {
+        console.warn("Firebase init failed", e);
+        return null;
+      }
     }
   }
   return window._firestoreDb;
@@ -326,23 +285,10 @@ function generateGameCode() {
 function createOnlineGame() {
   const db = getFirestore();
   if (!db) {
-    var msg = "無法使用線上對戰。";
-    if (!window.firebaseConfig) {
-      msg += " 請確認 firebase-config.js 已上傳到 GitHub 且與 index.html 同一層，並重新整理頁面（或用無痕模式試試）。";
-    } else if (!window.firebase || !window.firebase.firestore) {
-      msg += " Firebase SDK 未載入，請檢查網路或暫時關閉阻擋廣告／腳本的擴充功能。";
-    } else {
-      msg += " 請開啟開發者工具 (F12) 的 Console 查看錯誤訊息。";
-    }
-    alert(msg);
+    alert("請先設定 Firebase：複製 firebase-config.js.example 為 firebase-config.js 並填入你的專案設定。");
     return;
   }
-  // 立即給玩家回饋：確認按鈕有反應
-  try {
-    alert("正在建立線上對戰房間，請稍候…");
-  } catch (_) {
-    // ignore
-  }
+  alert("正在建立線上對戰房間，請稍候…");
   initBoard();
   const code = generateGameCode();
   const player1Id = "p1-" + Math.random().toString(36).slice(2, 12);
@@ -351,31 +297,36 @@ function createOnlineGame() {
   onlineGameId = code;
   gameMode = "online";
   const state = getSerializedState();
-  // Debug: help diagnose Firestore data issues (like nested arrays).
-  try {
-    console.log("createOnlineGame serialized state:", JSON.stringify(state));
-  } catch (e) {
-    console.log("createOnlineGame serialized state (stringify failed):", state, e);
-  }
   state.player1Id = player1Id;
   state.player2Id = null;
   state.createdAt = Date.now();
-  db.collection("banqi_games").doc(code).set(state).then(() => {
+  window._banqiCreateResolved = false;
+  const createPromise = db.collection("banqi_games").doc(code).set(state);
+  const timeoutMs = 12000;
+  const timeoutId = setTimeout(() => {
+    if (!window._banqiCreateResolved) {
+      console.error("Firestore set() 逾時，未在 " + timeoutMs / 1000 + " 秒內完成");
+      alert("建立房間逾時，請檢查網路連線與 Firebase Console 的 Firestore 規則是否已發佈。");
+    }
+  }, timeoutMs);
+
+  createPromise.then(() => {
+    window._banqiCreateResolved = true;
+    console.log("建立遊戲成功，代碼：" + code);
     document.getElementById("onlineCreateArea").style.display = "block";
     document.getElementById("onlineJoinArea").style.display = "none";
     const actions = document.querySelector("#modeModalStepOnline .modal-actions");
     if (actions) actions.style.display = "none";
     document.getElementById("onlineGameCode").textContent = code;
     document.getElementById("modeModalBackOnline").style.display = "none";
-    // 顯示提示，讓玩家一定注意到代碼。
-    try {
-      alert("線上對戰已建立！房間代碼： " + code + "。\n請把此代碼傳給家人，請他們在「線上對戰 → 加入遊戲」輸入。");
-    } catch (_) {
-      // ignore
-    }
+    alert("線上對戰已建立！房間代碼： " + code + "\n請把此代碼傳給家人，在「線上對戰 → 加入遊戲」輸入。");
     startOnlineListener();
   }).catch((err) => {
+    window._banqiCreateResolved = true;
+    console.error("建立遊戲失敗", err);
     alert("建立遊戲失敗：" + (err.message || err));
+  }).finally(() => {
+    clearTimeout(timeoutId);
   });
 }
 
