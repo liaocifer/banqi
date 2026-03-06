@@ -182,13 +182,20 @@ function pieceFromSerializable(s) {
 }
 
 function getSerializedState() {
-  const boardSer = board.map((row) =>
-    row.map((cell) => ({ p: pieceToSerializable(cell?.piece) }))
-  );
+  // Firestore 不支援巢狀陣列，因此將 4x8 棋盤攤平成一維陣列。
+  const boardSer = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = board[r]?.[c];
+      boardSer.push({ p: pieceToSerializable(cell?.piece) });
+    }
+  }
   const capturedRed = capturedPieces.red.map(pieceToSerializable).filter(Boolean);
   const capturedBlack = capturedPieces.black.map(pieceToSerializable).filter(Boolean);
   return {
     board: boardSer,
+    rows: ROWS,
+    cols: COLS,
     activePlayer,
     playerColors: { 1: playerColors[1], 2: playerColors[2] },
     moveHistory: moveHistory.slice(),
@@ -203,25 +210,43 @@ function getSerializedState() {
 function setStateFromSerialized(data) {
   if (!data || !data.board) return;
   const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
-  board = data.board.map((row) =>
-    row.map((cell) => {
-      const p = cell?.p;
-      return {
-        piece: p ? (() => {
-          const t = typeInfo(p.t);
-          return {
-            type: p.t,
-            color: p.c,
-            faceUp: !!p.f,
-            name: t?.name ?? p.t,
-            short: t?.short ?? "?",
-            rank: t?.rank ?? 0,
-            captured: false,
-          };
-        })() : null,
-      };
-    })
-  );
+  // 兼容舊版（2D 陣列）與新版（一維攤平）儲存格式。
+  const makeCell = (cell) => {
+    const p = cell?.p;
+    return {
+      piece: p
+        ? (() => {
+            const t = typeInfo(p.t);
+            return {
+              type: p.t,
+              color: p.c,
+              faceUp: !!p.f,
+              name: t?.name ?? p.t,
+              short: t?.short ?? "?",
+              rank: t?.rank ?? 0,
+              captured: false,
+            };
+          })()
+        : null,
+    };
+  };
+
+  if (Array.isArray(data.board[0])) {
+    // 舊格式：二維陣列 [row][col]
+    board = data.board.map((row) => row.map((cell) => makeCell(cell)));
+  } else {
+    // 新格式：一維陣列，長度 ROWS * COLS
+    const flat = data.board;
+    board = [];
+    let idx = 0;
+    for (let r = 0; r < ROWS; r++) {
+      const row = [];
+      for (let c = 0; c < COLS; c++) {
+        row.push(makeCell(flat[idx++]));
+      }
+      board.push(row);
+    }
+  }
   activePlayer = data.activePlayer ?? 1;
   playerColors[1] = data.playerColors?.[1] ?? null;
   playerColors[2] = data.playerColors?.[2] ?? null;
