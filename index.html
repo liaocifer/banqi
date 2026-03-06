@@ -207,6 +207,7 @@
               <label for="pieceBackColorPicker">象棋色</label>
               <input id="pieceBackColorPicker" type="color" value="#374151" />
             </div>
+            <button id="bugReportBtn" class="btn btn-ghost" type="button">回報問題</button>
           </div>
           <details class="rules">
             <summary>玩法說明</summary>
@@ -258,6 +259,17 @@
           </section>
         </section>
       </main>
+    </div>
+
+    <div id="bugLogModal" class="modal-overlay">
+      <div class="modal-box" style="max-width: 760px;">
+        <h2 class="modal-title">遊戲記錄（除錯用）</h2>
+        <textarea id="bugLogText" class="bug-log-text" readonly></textarea>
+        <div class="modal-actions">
+          <button type="button" id="bugLogCopy" class="btn btn-modal">複製記錄</button>
+          <button type="button" id="bugLogClose" class="btn btn-ghost">關閉</button>
+        </div>
+      </div>
     </div>
 
     <script src="firebase-config.js"></script>

@@ -149,6 +149,20 @@ body {
 .modal-error {
   color: #f87171;
 }
+.bug-log-text {
+  width: 100%;
+  min-height: 260px;
+  max-height: 52vh;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px;
+}
 .profile-group {
   text-align: left;
   margin-bottom: 12px;

@@ -76,6 +76,28 @@ let onlineStateVersion = 0;
 let latestAppliedOnlineStateVersion = 0;
 let onlineSyncInFlight = false;
 let onlineSyncQueued = false;
+let debugLogs = [];
+
+function logDebug(event, data = {}) {
+  const ts = new Date().toISOString();
+  const entry = {
+    ts,
+    event,
+    mode: gameMode,
+    gameId: onlineGameId || "",
+    myPlayerNumber: myPlayerNumber || "",
+    activePlayer,
+    gameOver,
+    stateVersion: onlineStateVersion,
+    ...data,
+  };
+  debugLogs.push(entry);
+  if (debugLogs.length > 400) debugLogs = debugLogs.slice(-400);
+}
+
+function getDebugLogText() {
+  return debugLogs.map((e) => JSON.stringify(e)).join("\n");
+}
 
 // 頁面載入時就初始化 Firebase，確保點「建立遊戲」時連線已就緒
 (function initFirebaseEarly() {
@@ -289,7 +311,7 @@ function setStateFromSerialized(data) {
   capturedPieces.red = (data.capturedPieces?.red || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
   capturedPieces.black = (data.capturedPieces?.black || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
   const incomingGameOver = !!data.gameOver;
-  gameOver = gameOver || incomingGameOver;
+  gameOver = incomingGameOver;
   lastWinnerPlayer = data.lastWinnerPlayer ?? lastWinnerPlayer;
   onlineRematchState = {
     p1: !!data.rematch?.p1,
@@ -306,6 +328,13 @@ function setStateFromSerialized(data) {
     clearInterval(timerId);
     timerId = null;
   }
+  logDebug("apply_snapshot", {
+    incomingVersion,
+    incomingActivePlayer: data.activePlayer ?? null,
+    incomingGameOver,
+    rematchP1: !!data.rematch?.p1,
+    rematchP2: !!data.rematch?.p2,
+  });
 
   const input1 = document.getElementById("player1Name");
   const input2 = document.getElementById("player2Name");
@@ -479,6 +508,7 @@ function createOnlineGame() {
   latestAppliedOnlineStateVersion = 1;
   const ref = db.ref(`banqi_games/${code}`);
   ref.set(state).then(() => {
+    logDebug("online_create_success", { code });
     console.log("建立遊戲成功，代碼：" + code);
     document.getElementById("onlineCreateArea").style.display = "block";
     document.getElementById("onlineJoinArea").style.display = "none";
@@ -488,6 +518,7 @@ function createOnlineGame() {
     document.getElementById("modeModalBackOnline").style.display = "none";
     startOnlineListener();
   }).catch((err) => {
+    logDebug("online_create_error", { message: String(err?.message || err) });
     console.error("建立遊戲失敗", err);
     alert("建立遊戲失敗：" + (err.message || err));
   });
@@ -551,12 +582,14 @@ function joinOnlineGame(code) {
         return;
       }
       const finalData = finalSnap.val();
+      logDebug("online_join_success", { code: trimmed });
       hideModeModal();
       document.getElementById("onlineJoinError").style.display = "none";
       setStateFromSerialized(finalData);
       startOnlineListener();
     }, false);
   }).catch((err) => {
+    logDebug("online_join_error", { message: String(err?.message || err), code: trimmed });
     document.getElementById("onlineJoinError").textContent = "無法連線：" + (err.message || err);
     document.getElementById("onlineJoinError").style.display = "block";
   });
@@ -570,6 +603,11 @@ function startOnlineListener() {
   const onValue = (snap) => {
     const data = snap.val();
     if (!data) return;
+    logDebug("online_snapshot", {
+      incomingVersion: Number(data.stateVersion || 0),
+      incomingActivePlayer: data.activePlayer ?? null,
+      incomingGameOver: !!data.gameOver,
+    });
     if (myPlayerNumber === 1 && !data.player2Id) return;
     setStateFromSerialized(data);
     if (myPlayerNumber === 1 && data.player2Id) hideModeModal();
@@ -591,6 +629,12 @@ function syncOnlineState() {
   refreshProfileFromInputs();
   const ref = db.ref(`banqi_games/${onlineGameId}`);
   const state = getSerializedState();
+  logDebug("sync_request", {
+    queued: onlineSyncQueued,
+    inFlight: onlineSyncInFlight,
+    localActivePlayer: state.activePlayer,
+    localGameOver: !!state.gameOver,
+  });
   ref.transaction((current) => {
     if (!current) return current;
     const nextVersion = Number(current.stateVersion || 0) + 1;
@@ -608,9 +652,11 @@ function syncOnlineState() {
   }, (err, committed, snap) => {
     if (err || !committed || !snap) {
       console.warn("Sync transaction failed", err);
+      logDebug("sync_failed", { message: String(err?.message || err) });
     } else {
       const writtenVersion = Number(snap.val()?.stateVersion || 0);
       onlineStateVersion = Math.max(onlineStateVersion, writtenVersion);
+      logDebug("sync_success", { writtenVersion });
     }
     onlineSyncInFlight = false;
     if (onlineSyncQueued) {
@@ -1058,6 +1104,7 @@ function handleTimeout() {
   }
 
   const skippedPlayer = activePlayer;
+  logDebug("timeout_skip_turn", { skippedPlayer });
   const statusEl = document.getElementById("status");
   const skippedName = getPlayerName(skippedPlayer);
 
@@ -1699,11 +1746,13 @@ function canPieceCaptureAgain(r, c) {
 }
 
 function endTurn() {
+  const fromPlayer = activePlayer;
   activePlayer = activePlayer === 1 ? 2 : 1;
   selectedCell = null;
   chainCaptureActive = false;
   renderBoard();
   updateStatus();
+  logDebug("end_turn", { fromPlayer, toPlayer: activePlayer });
   startTimer();
   if (gameMode === "online") syncOnlineState();
   if (gameMode === "vsAI" && activePlayer === 2 && !gameOver) {
@@ -2078,6 +2127,7 @@ function surrenderPlayer(playerNumber) {
 
   gameOver = true;
   lastWinnerPlayer = winnerPlayer;
+  logDebug("surrender", { loserPlayer, winnerPlayer });
   if (timerId !== null) {
     clearInterval(timerId);
     timerId = null;
@@ -2417,6 +2467,33 @@ function setup() {
       pauseBtn.textContent = isPaused ? "繼續遊戲" : "暫停計時";
     });
   }
+
+  const bugReportBtn = document.getElementById("bugReportBtn");
+  const bugLogModal = document.getElementById("bugLogModal");
+  const bugLogText = document.getElementById("bugLogText");
+  const bugLogCopy = document.getElementById("bugLogCopy");
+  const bugLogClose = document.getElementById("bugLogClose");
+  if (bugReportBtn && bugLogModal && bugLogText) {
+    bugReportBtn.addEventListener("click", () => {
+      bugLogText.value = getDebugLogText();
+      bugLogModal.classList.add("modal-open");
+    });
+  }
+  if (bugLogCopy && bugLogText) {
+    bugLogCopy.addEventListener("click", () => {
+      const text = bugLogText.value || "";
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+    });
+  }
+  if (bugLogClose && bugLogModal) {
+    bugLogClose.addEventListener("click", () => {
+      bugLogModal.classList.remove("modal-open");
+    });
+  }
+
+  logDebug("setup_complete");
 }
 
 if (document.readyState === "loading") {
