@@ -590,30 +590,33 @@ function syncOnlineState() {
   onlineSyncInFlight = true;
   refreshProfileFromInputs();
   const ref = db.ref(`banqi_games/${onlineGameId}`);
-  const versionRef = ref.child("stateVersion");
-  versionRef.transaction((v) => (Number(v || 0) + 1), (err, committed, snap) => {
+  const state = getSerializedState();
+  ref.transaction((current) => {
+    if (!current) return current;
+    const nextVersion = Number(current.stateVersion || 0) + 1;
+    return {
+      ...current,
+      ...state,
+      stateVersion: nextVersion,
+      // Keep room ownership and metadata stable.
+      player1Id: current.player1Id ?? state.player1Id ?? null,
+      player2Id: current.player2Id ?? state.player2Id ?? null,
+      createdAt: current.createdAt ?? state.createdAt ?? Date.now(),
+      // Keep rematch flags from current room state.
+      rematch: current.rematch || { p1: false, p2: false },
+    };
+  }, (err, committed, snap) => {
     if (err || !committed || !snap) {
-      console.warn("Sync version transaction failed", err);
-      onlineSyncInFlight = false;
-      if (onlineSyncQueued) {
-        onlineSyncQueued = false;
-        syncOnlineState();
-      }
-      return;
+      console.warn("Sync transaction failed", err);
+    } else {
+      const writtenVersion = Number(snap.val()?.stateVersion || 0);
+      onlineStateVersion = Math.max(onlineStateVersion, writtenVersion);
     }
-    const nextVersion = Number(snap.val() || 0);
-    onlineStateVersion = Math.max(onlineStateVersion, nextVersion);
-    const state = getSerializedState();
-    state.stateVersion = nextVersion;
-    ref.update(state).catch((updateErr) => {
-      console.warn("Sync failed", updateErr);
-    }).finally(() => {
-      onlineSyncInFlight = false;
-      if (onlineSyncQueued) {
-        onlineSyncQueued = false;
-        syncOnlineState();
-      }
-    });
+    onlineSyncInFlight = false;
+    if (onlineSyncQueued) {
+      onlineSyncQueued = false;
+      syncOnlineState();
+    }
   }, false);
 }
 
