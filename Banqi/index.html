@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <title>廖家暗棋 v0.5</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet" />
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.min.js"></script>
+  </head>
+  <body>
+    <!-- Mode selection popup (on load) -->
+    <div id="modeModal" class="modal-overlay modal-open">
+      <div id="modeModalStep1" class="modal-box">
+        <h2 class="modal-title">選擇遊戲模式</h2>
+        <div class="modal-actions">
+          <button type="button" id="modeTwoPlayer" class="btn btn-modal">雙人對戰</button>
+          <button type="button" id="modeVsAI" class="btn btn-modal">對戰 AI</button>
+          <button type="button" id="modeOnline" class="btn btn-modal">線上對戰</button>
+        </div>
+      </div>
+      <div id="modeModalStep2" class="modal-box" style="display: none;">
+        <h2 class="modal-title">選擇 AI 難度</h2>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-modal ai-level" data-level="easy">簡單</button>
+          <button type="button" class="btn btn-modal ai-level" data-level="medium">中等</button>
+          <button type="button" class="btn btn-modal ai-level" data-level="hard">困難</button>
+          <button type="button" class="btn btn-modal ai-level" data-level="nightmare">夢魘</button>
+        </div>
+        <button type="button" id="modeModalBack" class="btn btn-ghost modal-back">返回</button>
+      </div>
+      <div id="modeModalStepOnline" class="modal-box" style="display: none;">
+        <h2 class="modal-title">線上對戰</h2>
+        <div class="modal-actions">
+          <button type="button" id="onlineCreate" class="btn btn-modal">建立遊戲</button>
+          <button type="button" id="onlineJoin" class="btn btn-modal">加入遊戲</button>
+        </div>
+        <div id="onlineCreateArea" style="display: none;">
+          <p class="modal-message">邀請家人輸入此代碼加入：</p>
+          <p id="onlineGameCode" class="game-code"></p>
+          <button type="button" id="onlineCopyCode" class="btn btn-ghost">複製代碼</button>
+          <p id="onlineWaiting" class="modal-waiting">等待對手加入…</p>
+        </div>
+        <div id="onlineJoinArea" style="display: none;">
+          <label for="onlineCodeInput">輸入 6 位代碼</label>
+          <input id="onlineCodeInput" type="text" maxlength="6" placeholder="000000" class="game-code-input" />
+          <button type="button" id="onlineJoinBtn" class="btn btn-modal">加入</button>
+          <p id="onlineJoinError" class="modal-error" style="display: none;"></p>
+        </div>
+        <button type="button" id="modeModalBackOnline" class="btn btn-ghost modal-back">返回</button>
+      </div>
+    </div>
+
+    <!-- Game over popup -->
+    <div id="gameOverModal" class="modal-overlay">
+      <div class="modal-box">
+        <p id="gameOverMessage" class="modal-message"></p>
+        <button type="button" id="gameOverAgain" class="btn btn-modal">再來一局</button>
+      </div>
+    </div>
+
+    <div class="app">
+      <header class="header">
+        <h1>廖家暗棋 <span class="version">v0.5</span></h1>
+      </header>
+
+      <main class="main">
+        <!-- Player 1 panel (left) -->
+        <section class="panel panel-player panel-player1">
+          <div class="player-field">
+            <label for="player1Name">名稱</label>
+            <input
+              id="player1Name"
+              class="player-input"
+              type="text"
+              placeholder="請輸入名稱"
+            />
+          </div>
+          <div id="record1" class="record-display"></div>
+          <div class="avatar-control">
+            <label for="player1Avatar">角色</label>
+            <select id="player1Avatar" class="avatar-select">
+              <option value="liubei">劉備</option>
+              <option value="guanyu">關羽</option>
+              <option value="zhangfei">張飛</option>
+              <option value="caocao">曹操</option>
+              <option value="sunquan">孫權</option>
+              <option value="huangyueying">黃月英</option>
+              <option value="xiaoqiao">小喬</option>
+              <option value="daqiao">大喬</option>
+            </select>
+          </div>
+          <div id="player1AvatarPreview" class="avatar-preview"></div>
+          <button type="button" id="surrender1" class="btn btn-ghost btn-surrender">投降</button>
+          <section class="history-panel">
+            <h3 class="history-title">移動紀錄</h3>
+            <div id="history1" class="history-body"></div>
+          </section>
+        </section>
+
+        <!-- Center: timer + board + instructions -->
+        <section class="panel panel-center">
+          <div class="board-timer-bar">
+            <div id="timer" class="timer"></div>
+            <button id="pauseBtn" class="btn btn-ghost">暫停計時</button>
+          </div>
+          <div id="status" class="status-text"></div>
+          <section id="ruleOptions" class="rule-options">
+            <h3 class="rule-options-title">規則設定（開局前可改）</h3>
+            <div class="rule-options-grid">
+              <label class="rule-check" title="可連吃含蓋著的子；若翻開為己方子則只翻開、子放回">
+                <input type="checkbox" id="ruleAnqiChain" />
+                <span>暗棋連吃</span>
+              </label>
+              <label class="rule-check" title="車沿直線飛衝、馬可斜走；車與馬皆可吃任何子；馬平時可走直線，吃子時須走斜角">
+                <input type="checkbox" id="ruleCarHorse" />
+                <span>車飛馬斜</span>
+              </label>
+              <label class="rule-check" title="與電腦對戰">
+                <input type="checkbox" id="ruleVsAI" />
+                <span>對戰 AI</span>
+              </label>
+              <div class="rule-option-row">
+                <label for="ruleAIDifficulty">AI 難度</label>
+                <select id="ruleAIDifficulty" class="rule-select">
+                  <option value="easy">簡單</option>
+                  <option value="medium">中等</option>
+                  <option value="hard">困難</option>
+                  <option value="nightmare">夢魘</option>
+                </select>
+              </div>
+            </div>
+          </section>
+          <div id="board" class="board"></div>
+          <section id="captured-pieces" class="captured-pieces" aria-label="被吃掉的棋子">
+            <div class="captured-row">
+              <span class="captured-label">紅方被吃：</span>
+              <span id="captured-red" class="captured-list"></span>
+            </div>
+            <div class="captured-row">
+              <span class="captured-label">黑方被吃：</span>
+              <span id="captured-black" class="captured-list"></span>
+            </div>
+          </section>
+          <div class="board-controls">
+            <button id="restartBtn" class="btn">重新開始</button>
+            <div class="bg-picker">
+              <label for="bgColorPicker">背景色</label>
+              <input id="bgColorPicker" type="color" value="#0f172a" />
+            </div>
+            <div class="bg-picker">
+              <label for="pieceBackColorPicker">象棋色</label>
+              <input id="pieceBackColorPicker" type="color" value="#374151" />
+            </div>
+          </div>
+          <details class="rules">
+            <summary>玩法說明</summary>
+            <ul>
+              <li>棋盤為 4×8，共 32 枚棋子，開局全部蓋住並隨機擺放。</li>
+              <li>玩家 1 先翻任意一子；該子的顏色就是玩家 1 的陣營，另一種顏色歸玩家 2。</li>
+              <li>輪到你時，可翻開一枚蓋住的棋子，或將自己的一枚明子沿上下左右走一格。</li>
+              <li>走到對方明子所在格為吃棋，依棋子階級比較，兵可以吃將／帥。</li>
+            </ul>
+            <p class="note">
+              「炮」吃子須沿直線跳過一枚棋子；平移時路徑上不能有棋子。上方可勾選：暗棋連吃、車飛馬斜。
+            </p>
+          </details>
+        </section>
+
+        <!-- Player 2 panel (right) -->
+        <section class="panel panel-player panel-player2">
+          <div class="player-field">
+            <label for="player2Name">名稱</label>
+            <input
+              id="player2Name"
+              class="player-input"
+              type="text"
+              placeholder="請輸入名稱"
+            />
+          </div>
+          <div id="record2" class="record-display"></div>
+          <div class="avatar-control">
+            <label for="player2Avatar">角色</label>
+            <select id="player2Avatar" class="avatar-select">
+              <option value="liubei">劉備</option>
+              <option value="guanyu">關羽</option>
+              <option value="zhangfei">張飛</option>
+              <option value="caocao">曹操</option>
+              <option value="sunquan">孫權</option>
+              <option value="huangyueying">黃月英</option>
+              <option value="xiaoqiao">小喬</option>
+              <option value="daqiao">大喬</option>
+            </select>
+          </div>
+          <div id="player2AvatarPreview" class="avatar-preview"></div>
+          <button type="button" id="surrender2" class="btn btn-ghost btn-surrender">投降</button>
+          <section class="history-panel">
+            <h3 class="history-title">移動紀錄</h3>
+            <div id="history2" class="history-body"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <footer class="app-footer">
+      <span>廖家暗棋 v0.5</span> · 雙人 / AI / 線上對戰
+    </footer>
+    <script src="firebase-config.js"></script>
+    <script src="game.js" defer></script>
+  </body>
+</html>
