@@ -261,11 +261,25 @@ function getFirestore() {
   if (!window.firebaseConfig || !window.firebase?.firestore) return null;
   if (!window._firestoreDb) {
     try {
-      window.firebase.initializeApp(window.firebaseConfig);
-      window._firestoreDb = window.firebase.firestore();
+      // Initialize app if needed (compat SDK keeps an apps array).
+      if (!window.firebase.apps || window.firebase.apps.length === 0) {
+        window.firebase.initializeApp(window.firebaseConfig);
+      }
+      const db = window.firebase.firestore();
+      // Some networks/firewalls block WebChannel; long-polling avoids "Promise pending forever".
+      try {
+        db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
+      } catch (_) {
+        // settings may throw if called twice; safe to ignore
+      }
+      window._firestoreDb = db;
     } catch (e) {
       if (e.code === "app/duplicate-app" || (e.message && e.message.indexOf("already exists") !== -1)) {
-        window._firestoreDb = window.firebase.firestore();
+        const db = window.firebase.firestore();
+        try {
+          db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
+        } catch (_) {}
+        window._firestoreDb = db;
       } else {
         console.warn("Firebase init failed", e);
         return null;
