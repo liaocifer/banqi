@@ -51,8 +51,8 @@ python3 -m http.server 8080
 
 若要使用「線上對戰」：
 
-1. 在 [Firebase Console](https://console.firebase.google.com) 建立專案並啟用 Firestore。  
-2. 複製 `firebase-config.js.example` 為 `firebase-config.js`，填入你的 API 金鑰等設定。  
+1. 在 [Firebase Console](https://console.firebase.google.com) 建立專案並啟用 **Realtime Database**（建立資料庫）。  
+2. 複製 `firebase-config.js.example` 為 `firebase-config.js`，填入你的 API 金鑰等設定（記得包含 `databaseURL`）。  
 3. 將遊戲部署到 **HTTPS 網址**（如 Netlify / GitHub Pages），同一網址給雙方打開，一人「建立遊戲」、一人「加入遊戲」輸入 6 位代碼即可。
 
 ---

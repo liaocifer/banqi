@@ -257,36 +257,30 @@ function setStateFromSerialized(data) {
   updateRuleOptionsDisabled();
 }
 
-function getFirestore() {
-  if (!window.firebaseConfig || !window.firebase?.firestore) return null;
-  if (!window._firestoreDb) {
+function getRealtimeDb() {
+  if (!window.firebaseConfig || !window.firebase?.database) return null;
+
+  // Ensure databaseURL exists (RTDB requires it). If user didn't set it, try the common default.
+  if (!window.firebaseConfig.databaseURL && window.firebaseConfig.projectId) {
+    window.firebaseConfig.databaseURL = `https://${window.firebaseConfig.projectId}-default-rtdb.firebaseio.com`;
+  }
+
+  if (!window._rtdb) {
     try {
-      // Initialize app if needed (compat SDK keeps an apps array).
       if (!window.firebase.apps || window.firebase.apps.length === 0) {
         window.firebase.initializeApp(window.firebaseConfig);
       }
-      const db = window.firebase.firestore();
-      // Some networks/firewalls block WebChannel; long-polling avoids "Promise pending forever".
-      try {
-        db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
-      } catch (_) {
-        // settings may throw if called twice; safe to ignore
-      }
-      window._firestoreDb = db;
+      window._rtdb = window.firebase.database();
     } catch (e) {
       if (e.code === "app/duplicate-app" || (e.message && e.message.indexOf("already exists") !== -1)) {
-        const db = window.firebase.firestore();
-        try {
-          db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
-        } catch (_) {}
-        window._firestoreDb = db;
+        window._rtdb = window.firebase.database();
       } else {
         console.warn("Firebase init failed", e);
         return null;
       }
     }
   }
-  return window._firestoreDb;
+  return window._rtdb;
 }
 
 function generateGameCode() {
@@ -297,9 +291,9 @@ function generateGameCode() {
 }
 
 function createOnlineGame() {
-  const db = getFirestore();
+  const db = getRealtimeDb();
   if (!db) {
-    alert("請先設定 Firebase：複製 firebase-config.js.example 為 firebase-config.js 並填入你的專案設定。");
+    alert("請先設定 Firebase Realtime Database：請確認已啟用 Realtime Database，並在 firebase-config.js 設定 databaseURL。");
     return;
   }
   alert("正在建立線上對戰房間，請稍候…");
@@ -314,18 +308,8 @@ function createOnlineGame() {
   state.player1Id = player1Id;
   state.player2Id = null;
   state.createdAt = Date.now();
-  window._banqiCreateResolved = false;
-  const createPromise = db.collection("banqi_games").doc(code).set(state);
-  const timeoutMs = 12000;
-  const timeoutId = setTimeout(() => {
-    if (!window._banqiCreateResolved) {
-      console.error("Firestore set() 逾時，未在 " + timeoutMs / 1000 + " 秒內完成");
-      alert("建立房間逾時，請檢查網路連線與 Firebase Console 的 Firestore 規則是否已發佈。");
-    }
-  }, timeoutMs);
-
-  createPromise.then(() => {
-    window._banqiCreateResolved = true;
+  const ref = db.ref(`banqi_games/${code}`);
+  ref.set(state).then(() => {
     console.log("建立遊戲成功，代碼：" + code);
     document.getElementById("onlineCreateArea").style.display = "block";
     document.getElementById("onlineJoinArea").style.display = "none";
@@ -336,18 +320,15 @@ function createOnlineGame() {
     alert("線上對戰已建立！房間代碼： " + code + "\n請把此代碼傳給家人，在「線上對戰 → 加入遊戲」輸入。");
     startOnlineListener();
   }).catch((err) => {
-    window._banqiCreateResolved = true;
     console.error("建立遊戲失敗", err);
     alert("建立遊戲失敗：" + (err.message || err));
-  }).finally(() => {
-    clearTimeout(timeoutId);
   });
 }
 
 function joinOnlineGame(code) {
-  const db = getFirestore();
+  const db = getRealtimeDb();
   if (!db) {
-    alert("請先設定 Firebase。");
+    alert("請先設定 Firebase Realtime Database。");
     return;
   }
   const trimmed = String(code).trim().toUpperCase();
@@ -356,14 +337,14 @@ function joinOnlineGame(code) {
     document.getElementById("onlineJoinError").style.display = "block";
     return;
   }
-  const ref = db.collection("banqi_games").doc(trimmed);
-  ref.get().then((snap) => {
-    if (!snap.exists) {
+  const ref = db.ref(`banqi_games/${trimmed}`);
+  ref.once("value").then((snap) => {
+    const data = snap.val();
+    if (!data) {
       document.getElementById("onlineJoinError").textContent = "找不到此遊戲";
       document.getElementById("onlineJoinError").style.display = "block";
       return;
     }
-    const data = snap.data();
     if (data.player2Id) {
       document.getElementById("onlineJoinError").textContent = "此遊戲已滿";
       document.getElementById("onlineJoinError").style.display = "block";
@@ -374,15 +355,28 @@ function joinOnlineGame(code) {
     myPlayerNumber = 2;
     onlineGameId = trimmed;
     gameMode = "online";
-    ref.update({ player2Id }).then(() => {
+    // Use transaction to avoid race (only first joiner gets the seat)
+    ref.transaction((current) => {
+      if (!current) return current;
+      if (current.player2Id) return; // abort
+      return { ...current, player2Id };
+    }, (err, committed, finalSnap) => {
+      if (err) {
+        document.getElementById("onlineJoinError").textContent = "加入失敗：" + (err.message || err);
+        document.getElementById("onlineJoinError").style.display = "block";
+        return;
+      }
+      if (!committed) {
+        document.getElementById("onlineJoinError").textContent = "此遊戲已滿";
+        document.getElementById("onlineJoinError").style.display = "block";
+        return;
+      }
+      const finalData = finalSnap.val();
       hideModeModal();
       document.getElementById("onlineJoinError").style.display = "none";
-      setStateFromSerialized(data);
+      setStateFromSerialized(finalData);
       startOnlineListener();
-    }).catch((err) => {
-      document.getElementById("onlineJoinError").textContent = "加入失敗：" + (err.message || err);
-      document.getElementById("onlineJoinError").style.display = "block";
-    });
+    }, false);
   }).catch((err) => {
     document.getElementById("onlineJoinError").textContent = "無法連線：" + (err.message || err);
     document.getElementById("onlineJoinError").style.display = "block";
@@ -390,27 +384,27 @@ function joinOnlineGame(code) {
 }
 
 function startOnlineListener() {
-  const db = getFirestore();
+  const db = getRealtimeDb();
   if (!db || !onlineGameId) return;
   if (firestoreUnsubscribe) firestoreUnsubscribe();
-  const ref = db.collection("banqi_games").doc(onlineGameId);
-  firestoreUnsubscribe = ref.onSnapshot((snap) => {
-    if (!snap.exists) return;
-    const data = snap.data();
+  const ref = db.ref(`banqi_games/${onlineGameId}`);
+  const onValue = (snap) => {
+    const data = snap.val();
+    if (!data) return;
     if (myPlayerNumber === 1 && !data.player2Id) return;
     setStateFromSerialized(data);
-    if (myPlayerNumber === 1 && data.player2Id) {
-      hideModeModal();
-    }
-  }, (err) => console.warn("Firestore snapshot error", err));
+    if (myPlayerNumber === 1 && data.player2Id) hideModeModal();
+  };
+  ref.on("value", onValue, (err) => console.warn("RTDB listener error", err));
+  firestoreUnsubscribe = () => ref.off("value", onValue);
 }
 
 function syncOnlineState() {
   if (gameMode !== "online" || !onlineGameId) return;
-  const db = getFirestore();
+  const db = getRealtimeDb();
   if (!db) return;
   const state = getSerializedState();
-  db.collection("banqi_games").doc(onlineGameId).update(state).catch((err) => console.warn("Sync failed", err));
+  db.ref(`banqi_games/${onlineGameId}`).update(state).catch((err) => console.warn("Sync failed", err));
 }
 
 function leaveOnlineGame() {
