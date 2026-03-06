@@ -42,6 +42,7 @@ let selectedCell = null;
 let gameOver = false;
 
 let playerNames = { 1: "", 2: "" };
+let playerAvatars = { 1: "liubei", 2: "liubei" };
 let moveHistory = []; // { player: 1|2, text: string }[]
 let timerId = null;
 let remainingSeconds = 30;
@@ -70,12 +71,18 @@ let pendingCaptureFly = null; // { startRect: DOMRect, piece } for fly-from-boar
 (function initFirebaseEarly() {
   if (typeof window === "undefined" || !window.firebaseConfig || !window.firebase) return;
   try {
-    window.firebase.initializeApp(window.firebaseConfig);
-    window._firestoreDb = window.firebase.firestore();
+    if (!window.firebase.apps || window.firebase.apps.length === 0) {
+      window.firebase.initializeApp(window.firebaseConfig);
+    }
+    if (window.firebase.database) {
+      window._rtdb = window.firebase.database();
+    }
   } catch (e) {
     if (e.code === "app/duplicate-app" || (e.message && e.message.indexOf("already exists") !== -1)) {
       try {
-        window._firestoreDb = window.firebase.firestore();
+        if (window.firebase.database) {
+          window._rtdb = window.firebase.database();
+        }
       } catch (_) {}
     }
   }
@@ -206,6 +213,8 @@ function getSerializedState() {
     board: boardSer,
     activePlayer,
     playerColors: { 1: playerColors[1], 2: playerColors[2] },
+    playerNames: { 1: playerNames[1] || "", 2: playerNames[2] || "" },
+    playerAvatars: { 1: playerAvatars[1] || "liubei", 2: playerAvatars[2] || "liubei" },
     moveHistory: moveHistory.slice(),
     capturedPieces: { red: capturedRed, black: capturedBlack },
     gameOver,
@@ -240,10 +249,15 @@ function setStateFromSerialized(data) {
   activePlayer = data.activePlayer ?? 1;
   playerColors[1] = data.playerColors?.[1] ?? null;
   playerColors[2] = data.playerColors?.[2] ?? null;
+  playerNames[1] = data.playerNames?.[1] ?? playerNames[1];
+  playerNames[2] = data.playerNames?.[2] ?? playerNames[2];
+  playerAvatars[1] = data.playerAvatars?.[1] ?? playerAvatars[1];
+  playerAvatars[2] = data.playerAvatars?.[2] ?? playerAvatars[2];
   moveHistory = data.moveHistory ? data.moveHistory.slice() : [];
   capturedPieces.red = (data.capturedPieces?.red || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
   capturedPieces.black = (data.capturedPieces?.black || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
-  gameOver = !!data.gameOver;
+  const incomingGameOver = !!data.gameOver;
+  gameOver = gameOver || incomingGameOver;
   if (data.gameRules) {
     gameRules.anqiChain = !!data.gameRules.anqiChain;
     gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
@@ -251,6 +265,23 @@ function setStateFromSerialized(data) {
   selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
   chainCaptureActive = !!data.chainCaptureActive;
   pendingCaptureFly = null;
+  if (gameOver && timerId !== null) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+
+  const input1 = document.getElementById("player1Name");
+  const input2 = document.getElementById("player2Name");
+  if (input1) input1.value = playerNames[1] || "";
+  if (input2) input2.value = playerNames[2] || "";
+
+  const avatarSelect1 = document.getElementById("player1Avatar");
+  const avatarSelect2 = document.getElementById("player2Avatar");
+  if (avatarSelect1 && playerAvatars[1]) avatarSelect1.value = playerAvatars[1];
+  if (avatarSelect2 && playerAvatars[2]) avatarSelect2.value = playerAvatars[2];
+  renderAvatarPreview(1);
+  renderAvatarPreview(2);
+
   renderBoard();
   renderHistory();
   updateStatus();
@@ -290,20 +321,94 @@ function generateGameCode() {
   return code;
 }
 
+function refreshProfileFromInputs() {
+  const input1 = document.getElementById("player1Name");
+  const input2 = document.getElementById("player2Name");
+  const avatar1 = document.getElementById("player1Avatar");
+  const avatar2 = document.getElementById("player2Avatar");
+
+  playerNames[1] = input1 ? String(input1.value || "").trim() : (playerNames[1] || "");
+  playerNames[2] = input2 ? String(input2.value || "").trim() : (playerNames[2] || "");
+  playerAvatars[1] = avatar1?.value || playerAvatars[1] || "liubei";
+  playerAvatars[2] = avatar2?.value || playerAvatars[2] || "liubei";
+}
+
+function validateProfilesForMode(mode, role = "auto") {
+  refreshProfileFromInputs();
+  let needP1 = true;
+  let needP2 = false;
+  if (mode === "twoPlayer") {
+    needP2 = true;
+  } else if (mode === "online") {
+    if (role === "host") {
+      needP1 = true;
+      needP2 = false;
+    } else if (role === "joiner") {
+      needP1 = false;
+      needP2 = true;
+    } else {
+      needP1 = true;
+      needP2 = true;
+    }
+  }
+
+  if (needP1 && !playerNames[1]) {
+    alert("請先輸入玩家 1 名稱再開始。");
+    document.getElementById("player1Name")?.focus();
+    return false;
+  }
+  if (needP1 && !playerAvatars[1]) {
+    alert("請先為玩家 1 選擇角色。");
+    document.getElementById("player1Avatar")?.focus();
+    return false;
+  }
+  if (needP2 && !playerNames[2]) {
+    alert("請先輸入玩家 2 名稱再開始。");
+    document.getElementById("player2Name")?.focus();
+    return false;
+  }
+  if (needP2 && !playerAvatars[2]) {
+    alert("請先為玩家 2 選擇角色。");
+    document.getElementById("player2Avatar")?.focus();
+    return false;
+  }
+  return true;
+}
+
+function resetForNewOnlineRoomAsHost() {
+  initBoard();
+  activePlayer = 1;
+  playerColors = { 1: null, 2: null };
+  selectedCell = null;
+  gameOver = false;
+  chainCaptureActive = false;
+  moveHistory = [];
+  renderHistory();
+  if (timerId !== null) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+  remainingSeconds = 30;
+  isPaused = false;
+  updateTimerDisplay();
+}
+
 function createOnlineGame() {
   const db = getRealtimeDb();
   if (!db) {
     alert("請先設定 Firebase Realtime Database：請確認已啟用 Realtime Database，並在 firebase-config.js 設定 databaseURL。");
     return;
   }
+  if (!validateProfilesForMode("online", "host")) return;
   alert("正在建立線上對戰房間，請稍候…");
-  initBoard();
+  resetForNewOnlineRoomAsHost();
   const code = generateGameCode();
   const player1Id = "p1-" + Math.random().toString(36).slice(2, 12);
   sessionStorage.setItem("banqi-online-id", player1Id);
-  myPlayerNumber = 1;
+  myPlayerNumber = 1; // host is always player 1
   onlineGameId = code;
   gameMode = "online";
+  refreshProfileFromInputs();
   const state = getSerializedState();
   state.player1Id = player1Id;
   state.player2Id = null;
@@ -332,6 +437,7 @@ function joinOnlineGame(code) {
     return;
   }
   const trimmed = String(code).trim().toUpperCase();
+  if (!validateProfilesForMode("online", "joiner")) return;
   if (trimmed.length !== 6) {
     document.getElementById("onlineJoinError").textContent = "請輸入 6 位代碼";
     document.getElementById("onlineJoinError").style.display = "block";
@@ -359,7 +465,18 @@ function joinOnlineGame(code) {
     ref.transaction((current) => {
       if (!current) return current;
       if (current.player2Id) return; // abort
-      return { ...current, player2Id };
+      return {
+        ...current,
+        player2Id,
+        playerNames: {
+          ...(current.playerNames || {}),
+          2: playerNames[2] || "",
+        },
+        playerAvatars: {
+          ...(current.playerAvatars || {}),
+          2: playerAvatars[2] || "liubei",
+        },
+      };
     }, (err, committed, finalSnap) => {
       if (err) {
         document.getElementById("onlineJoinError").textContent = "加入失敗：" + (err.message || err);
@@ -403,6 +520,7 @@ function syncOnlineState() {
   if (gameMode !== "online" || !onlineGameId) return;
   const db = getRealtimeDb();
   if (!db) return;
+  refreshProfileFromInputs();
   const state = getSerializedState();
   db.ref(`banqi_games/${onlineGameId}`).update(state).catch((err) => console.warn("Sync failed", err));
 }
@@ -1673,6 +1791,7 @@ function setup() {
   const modeVsAIBtn = document.getElementById("modeVsAI");
   if (modeTwoPlayerBtn) {
     modeTwoPlayerBtn.addEventListener("click", () => {
+      if (!validateProfilesForMode("twoPlayer")) return;
       hideModeModal();
       gameMode = "twoPlayer";
       const cb = document.getElementById("ruleVsAI");
@@ -1773,6 +1892,7 @@ function setup() {
 
   document.querySelectorAll(".ai-level").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (!validateProfilesForMode("vsAI")) return;
       const level = btn.getAttribute("data-level");
       if (level) {
         const select = document.getElementById("ruleAIDifficulty");
@@ -1827,6 +1947,7 @@ function setup() {
     input1.addEventListener("input", (event) => {
       playerNames[1] = event.target.value;
       updateStatus();
+      if (gameMode === "online") syncOnlineState();
     });
   }
   if (input2) {
@@ -1834,6 +1955,7 @@ function setup() {
     input2.addEventListener("input", (event) => {
       playerNames[2] = event.target.value;
       updateStatus();
+      if (gameMode === "online") syncOnlineState();
     });
   }
 
@@ -1857,14 +1979,20 @@ function setup() {
   const avatarSelect2 = document.getElementById("player2Avatar");
   if (avatarSelect1) {
     avatarSelect1.addEventListener("change", () => {
+      playerAvatars[1] = avatarSelect1.value;
       renderAvatarPreview(1);
+      if (gameMode === "online") syncOnlineState();
     });
+    playerAvatars[1] = avatarSelect1.value || "liubei";
     renderAvatarPreview(1);
   }
   if (avatarSelect2) {
     avatarSelect2.addEventListener("change", () => {
+      playerAvatars[2] = avatarSelect2.value;
       renderAvatarPreview(2);
+      if (gameMode === "online") syncOnlineState();
     });
+    playerAvatars[2] = avatarSelect2.value || "liubei";
     renderAvatarPreview(2);
   }
 
