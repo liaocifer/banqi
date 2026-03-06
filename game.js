@@ -243,8 +243,20 @@ function setStateFromSerialized(data) {
 }
 
 function getFirestore() {
-  if (!window.firebaseConfig) {
-    console.warn("Firebase: firebase-config.js 未載入或未設定 window.firebaseConfig，請確認該檔案與 index.html 在同一層且已上傳到 GitHub。");
+  // Support either `window.firebaseConfig = {...}` or `const firebaseConfig = {...}` in a plain script.
+  let cfg = window.firebaseConfig;
+  if (!cfg) {
+    try {
+      // eslint-disable-next-line no-undef
+      if (typeof firebaseConfig !== "undefined") cfg = firebaseConfig;
+    } catch (_) {
+      // ignore
+    }
+  }
+  if (!cfg) {
+    console.warn(
+      "Firebase: firebase-config.js 未載入或未提供設定。請確定檔案內容是 `window.firebaseConfig = {...}`（不要包含 import / initializeApp）。"
+    );
     return null;
   }
   if (!window.firebase?.firestore) {
@@ -253,7 +265,8 @@ function getFirestore() {
   }
   if (!window._firestoreDb) {
     try {
-      window.firebase.initializeApp(window.firebaseConfig);
+      window.firebaseConfig = cfg;
+      window.firebase.initializeApp(cfg);
       window._firestoreDb = window.firebase.firestore();
     } catch (e) {
       console.warn("Firebase init failed", e);
