@@ -182,12 +182,13 @@ function pieceFromSerializable(s) {
 }
 
 function getSerializedState() {
-  // Firestore 不支援巢狀陣列，因此將 4x8 棋盤攤平成一維陣列。
-  const boardSer = [];
+  // Firestore 不支援巢狀陣列，因此將棋盤儲存為物件（key: "r_c"）。
+  const boardSer = {};
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const cell = board[r]?.[c];
-      boardSer.push({ p: pieceToSerializable(cell?.piece) });
+      const key = `${r}_${c}`;
+      boardSer[key] = { p: pieceToSerializable(cell?.piece) };
     }
   }
   const capturedRed = capturedPieces.red.map(pieceToSerializable).filter(Boolean);
@@ -210,7 +211,7 @@ function getSerializedState() {
 function setStateFromSerialized(data) {
   if (!data || !data.board) return;
   const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
-  // 兼容舊版（2D 陣列）與新版（一維攤平）儲存格式。
+  // 兼容舊版（2D 陣列）、中間版（一維陣列）與新版（物件 key: "r_c"）儲存格式。
   const makeCell = (cell) => {
     const p = cell?.p;
     return {
@@ -231,18 +232,32 @@ function setStateFromSerialized(data) {
     };
   };
 
-  if (Array.isArray(data.board[0])) {
-    // 舊格式：二維陣列 [row][col]
-    board = data.board.map((row) => row.map((cell) => makeCell(cell)));
+  if (Array.isArray(data.board)) {
+    if (Array.isArray(data.board[0])) {
+      // 最舊格式：二維陣列 [row][col]
+      board = data.board.map((row) => row.map((cell) => makeCell(cell)));
+    } else {
+      // 中間格式：一維陣列，長度 ROWS * COLS
+      const flat = data.board;
+      board = [];
+      let idx = 0;
+      for (let r = 0; r < ROWS; r++) {
+        const row = [];
+        for (let c = 0; c < COLS; c++) {
+          row.push(makeCell(flat[idx++]));
+        }
+        board.push(row);
+      }
+    }
   } else {
-    // 新格式：一維陣列，長度 ROWS * COLS
-    const flat = data.board;
+    // 新格式：物件，key 為 "r_c"
+    const obj = data.board || {};
     board = [];
-    let idx = 0;
     for (let r = 0; r < ROWS; r++) {
       const row = [];
       for (let c = 0; c < COLS; c++) {
-        row.push(makeCell(flat[idx++]));
+        const key = `${r}_${c}`;
+        row.push(makeCell(obj[key] || null));
       }
       board.push(row);
     }
