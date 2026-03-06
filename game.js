@@ -337,6 +337,12 @@ function createOnlineGame() {
     alert(msg);
     return;
   }
+  // 立即給玩家回饋：確認按鈕有反應
+  try {
+    alert("正在建立線上對戰房間，請稍候…");
+  } catch (_) {
+    // ignore
+  }
   initBoard();
   const code = generateGameCode();
   const player1Id = "p1-" + Math.random().toString(36).slice(2, 12);
