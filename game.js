@@ -457,6 +457,7 @@ const CHARACTERS = {
   huangyueying: { name: "黃月英", cssClass: "avatar-huangyueying", id: "huangyueying" },
   xiaoqiao:     { name: "小喬",   cssClass: "avatar-xiaoqiao", id: "xiaoqiao" },
   daqiao:       { name: "大喬",   cssClass: "avatar-daqiao",   id: "daqiao" },
+  kimmy:        { name: "奇米",   cssClass: "avatar-kimmy",    id: "kimmy" },
 };
 
 function getCharacterImageUrl(id) {
@@ -1544,12 +1545,29 @@ function renderCaptured() {
   }, 700);
 }
 
+function updatePlayerPanelThemes() {
+  const panel1 = document.querySelector(".panel-player1");
+  const panel2 = document.querySelector(".panel-player2");
+  if (!panel1 || !panel2) return;
+
+  panel1.classList.remove("theme-red", "theme-black");
+  panel2.classList.remove("theme-red", "theme-black");
+
+  if (playerColors[1] === "red" || playerColors[1] === "black") {
+    panel1.classList.add(`theme-${playerColors[1]}`);
+  }
+  if (playerColors[2] === "red" || playerColors[2] === "black") {
+    panel2.classList.add(`theme-${playerColors[2]}`);
+  }
+}
+
 function updateStatus() {
   const statusEl = document.getElementById("status");
   if (!statusEl) return;
 
   const panel1 = document.querySelector(".panel-player1");
   const panel2 = document.querySelector(".panel-player2");
+  updatePlayerPanelThemes();
   panel1?.classList.remove("active-turn");
   panel2?.classList.remove("active-turn");
   if (!gameOver) {
