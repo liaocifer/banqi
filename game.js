@@ -72,6 +72,10 @@ let pendingProfilePayload = null;
 let lastWinnerPlayer = null;
 let onlineRematchWaiting = false;
 let onlineRematchState = { p1: false, p2: false };
+let onlineStateVersion = 0;
+let latestAppliedOnlineStateVersion = 0;
+let onlineSyncInFlight = false;
+let onlineSyncQueued = false;
 
 // 頁面載入時就初始化 Firebase，確保點「建立遊戲」時連線已就緒
 (function initFirebaseEarly() {
@@ -235,6 +239,7 @@ function getSerializedState() {
       p1: !!onlineRematchState.p1,
       p2: !!onlineRematchState.p2,
     },
+    stateVersion: onlineStateVersion || 0,
     gameRules: { anqiChain: gameRules.anqiChain, carHorseSpecial: gameRules.carHorseSpecial },
     selectedCell: selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null,
     chainCaptureActive,
@@ -243,6 +248,14 @@ function getSerializedState() {
 
 function setStateFromSerialized(data) {
   if (!data || !data.board) return;
+  const incomingVersion = Number(data.stateVersion || 0);
+  if (incomingVersion && incomingVersion < latestAppliedOnlineStateVersion) {
+    return;
+  }
+  if (incomingVersion) {
+    latestAppliedOnlineStateVersion = incomingVersion;
+    onlineStateVersion = Math.max(onlineStateVersion, incomingVersion);
+  }
   const prevActivePlayer = activePlayer;
   const prevGameOver = gameOver;
   const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
@@ -461,6 +474,9 @@ function createOnlineGame() {
   state.player1Id = player1Id;
   state.player2Id = null;
   state.createdAt = Date.now();
+  state.stateVersion = 1;
+  onlineStateVersion = 1;
+  latestAppliedOnlineStateVersion = 1;
   const ref = db.ref(`banqi_games/${code}`);
   ref.set(state).then(() => {
     console.log("建立遊戲成功，代碼：" + code);
@@ -567,9 +583,38 @@ function syncOnlineState() {
   if (gameMode !== "online" || !onlineGameId) return;
   const db = getRealtimeDb();
   if (!db) return;
+  if (onlineSyncInFlight) {
+    onlineSyncQueued = true;
+    return;
+  }
+  onlineSyncInFlight = true;
   refreshProfileFromInputs();
-  const state = getSerializedState();
-  db.ref(`banqi_games/${onlineGameId}`).update(state).catch((err) => console.warn("Sync failed", err));
+  const ref = db.ref(`banqi_games/${onlineGameId}`);
+  const versionRef = ref.child("stateVersion");
+  versionRef.transaction((v) => (Number(v || 0) + 1), (err, committed, snap) => {
+    if (err || !committed || !snap) {
+      console.warn("Sync version transaction failed", err);
+      onlineSyncInFlight = false;
+      if (onlineSyncQueued) {
+        onlineSyncQueued = false;
+        syncOnlineState();
+      }
+      return;
+    }
+    const nextVersion = Number(snap.val() || 0);
+    onlineStateVersion = Math.max(onlineStateVersion, nextVersion);
+    const state = getSerializedState();
+    state.stateVersion = nextVersion;
+    ref.update(state).catch((updateErr) => {
+      console.warn("Sync failed", updateErr);
+    }).finally(() => {
+      onlineSyncInFlight = false;
+      if (onlineSyncQueued) {
+        onlineSyncQueued = false;
+        syncOnlineState();
+      }
+    });
+  }, false);
 }
 
 function showRematchWaitingUI(show) {
@@ -652,6 +697,10 @@ function leaveOnlineGame() {
   onlineGameId = null;
   myPlayerNumber = null;
   onlineRematchState = { p1: false, p2: false };
+  onlineStateVersion = 0;
+  latestAppliedOnlineStateVersion = 0;
+  onlineSyncInFlight = false;
+  onlineSyncQueued = false;
   showRematchWaitingUI(false);
   if (gameMode === "online") gameMode = "twoPlayer";
 }
@@ -1001,6 +1050,9 @@ function updateTimerDisplay() {
 
 function handleTimeout() {
   if (gameOver) return;
+  if (gameMode === "online" && myPlayerNumber && activePlayer !== myPlayerNumber) {
+    return;
+  }
 
   const skippedPlayer = activePlayer;
   const statusEl = document.getElementById("status");
@@ -1036,6 +1088,9 @@ function startTimer(reset = true) {
     if (isPaused) {
       return;
     }
+    if (gameMode === "online" && myPlayerNumber && activePlayer !== myPlayerNumber) {
+      return;
+    }
 
     remainingSeconds -= 1;
     if (remainingSeconds <= 0) {
@@ -1067,12 +1122,10 @@ function handleCellClick(row, col) {
     if (selectedCell.row === row && selectedCell.col === col) {
       selectedCell = null;
       renderBoard();
-      if (gameMode === "online") syncOnlineState();
       return;
     }
     attemptMove(selectedCell, { row, col });
     renderBoard();
-    if (gameMode === "online") syncOnlineState();
     return;
   }
 
@@ -1311,7 +1364,6 @@ function attemptMove(from, to) {
     }
     selectedCell = { row: to.row, col: to.col };
     renderBoard();
-    if (gameMode === "online") syncOnlineState();
     return;
   }
 
