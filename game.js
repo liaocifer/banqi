@@ -1179,7 +1179,6 @@ function flipPiece(row, col) {
 
   renderBoard();
   updateStatus();
-  if (gameMode === "online") syncOnlineState();
 }
 
 function isAdjacent(a, b) {
