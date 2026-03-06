@@ -181,13 +181,33 @@ body {
 }
 
 .panel-player1 {
-  border-left: 3px solid rgba(34, 197, 94, 0.6);
+  border-left: 3px solid rgba(148, 163, 184, 0.45);
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .panel-player2 {
-  border-right: 3px solid rgba(59, 130, 246, 0.6);
+  border-right: 3px solid rgba(148, 163, 184, 0.45);
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.panel-player1.theme-red {
+  border-left-color: rgba(248, 113, 113, 0.85);
+  background-color: rgba(127, 29, 29, 0.18);
+}
+
+.panel-player2.theme-red {
+  border-right-color: rgba(248, 113, 113, 0.85);
+  background-color: rgba(127, 29, 29, 0.18);
+}
+
+.panel-player1.theme-black {
+  border-left-color: rgba(148, 163, 184, 0.9);
+  background-color: rgba(30, 41, 59, 0.36);
+}
+
+.panel-player2.theme-black {
+  border-right-color: rgba(148, 163, 184, 0.9);
+  background-color: rgba(30, 41, 59, 0.36);
 }
 
 .panel-player1.active-turn {
@@ -198,6 +218,18 @@ body {
 .panel-player2.active-turn {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 24px rgba(59, 130, 246, 0.25);
   background-color: rgba(59, 130, 246, 0.08);
+}
+
+.panel-player1.theme-red.active-turn,
+.panel-player2.theme-red.active-turn {
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.7), 0 0 26px rgba(248, 113, 113, 0.35);
+  background-color: rgba(220, 38, 38, 0.22);
+}
+
+.panel-player1.theme-black.active-turn,
+.panel-player2.theme-black.active-turn {
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.65), 0 0 26px rgba(148, 163, 184, 0.3);
+  background-color: rgba(51, 65, 85, 0.45);
 }
 
 .record-display {
@@ -502,6 +534,10 @@ body {
   background: linear-gradient(135deg, #67e8f9, #0891b2);
 }
 
+.avatar-kimmy {
+  background: linear-gradient(135deg, #fb7185, #f59e0b);
+}
+
 @keyframes avatar-bob {
   0%,
   100% {
@@ -746,6 +782,12 @@ body {
 .rule-options.disabled .rule-option-row {
   opacity: 0.6;
   pointer-events: none;
+}
+
+/* AI mode is selected from modal; hide duplicate controls on main board. */
+#ruleVsAIOption,
+#ruleAIDifficultyOption {
+  display: none;
 }
 
 .btn-surrender {

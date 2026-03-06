@@ -90,6 +90,7 @@
               <option value="huangyueying">黃月英</option>
               <option value="xiaoqiao">小喬</option>
               <option value="daqiao">大喬</option>
+              <option value="kimmy">奇米</option>
             </select>
           </div>
           <div id="player1AvatarPreview" class="avatar-preview"></div>
@@ -118,11 +119,11 @@
                 <input type="checkbox" id="ruleCarHorse" />
                 <span>車飛馬斜</span>
               </label>
-              <label class="rule-check" title="與電腦對戰">
+              <label id="ruleVsAIOption" class="rule-check" title="與電腦對戰">
                 <input type="checkbox" id="ruleVsAI" />
                 <span>對戰 AI</span>
               </label>
-              <div class="rule-option-row">
+              <div id="ruleAIDifficultyOption" class="rule-option-row">
                 <label for="ruleAIDifficulty">AI 難度</label>
                 <select id="ruleAIDifficulty" class="rule-select">
                   <option value="easy">簡單</option>
@@ -192,6 +193,7 @@
               <option value="huangyueying">黃月英</option>
               <option value="xiaoqiao">小喬</option>
               <option value="daqiao">大喬</option>
+              <option value="kimmy">奇米</option>
             </select>
           </div>
           <div id="player2AvatarPreview" class="avatar-preview"></div>
@@ -204,9 +206,6 @@
       </main>
     </div>
 
-    <footer class="app-footer">
-      <span>廖家暗棋 v0.5</span> · 雙人 / AI / 線上對戰
-    </footer>
     <script src="firebase-config.js"></script>
     <script src="game.js" defer></script>
   </body>
