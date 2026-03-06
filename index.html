@@ -88,6 +88,10 @@
             <option value="kimmy">奇米</option>
           </select>
         </div>
+        <div id="profileHostRulesGroup" class="profile-group" style="display: none;">
+          <label><input type="checkbox" id="profileRuleAnqiChain" /> 暗棋連吃</label>
+          <label><input type="checkbox" id="profileRuleCarHorse" /> 車飛馬斜</label>
+        </div>
         <p id="modeProfileError" class="modal-error" style="display: none;"></p>
         <div class="modal-actions">
           <button type="button" id="modeProfileStart" class="btn btn-modal">開始遊戲</button>
@@ -101,6 +105,9 @@
       <div class="modal-box">
         <p id="gameOverMessage" class="modal-message"></p>
         <button type="button" id="gameOverAgain" class="btn btn-modal">再來一局</button>
+        <button type="button" id="gameOverEnd" class="btn btn-ghost">結束比賽</button>
+        <p id="gameOverWaiting" class="modal-waiting" style="display: none;">等待對手接受挑戰…</p>
+        <button type="button" id="gameOverCancelWait" class="btn btn-ghost" style="display: none;">取消</button>
       </div>
     </div>
 

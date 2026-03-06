@@ -69,6 +69,9 @@ let pendingCaptureFly = null; // { startRect: DOMRect, piece } for fly-from-boar
 let profileLocked = { 1: false, 2: false };
 let pendingProfileContext = null; // "twoPlayer" | "vsAI" | "onlineHost" | "onlineJoin"
 let pendingProfilePayload = null;
+let lastWinnerPlayer = null;
+let onlineRematchWaiting = false;
+let onlineRematchState = { p1: false, p2: false };
 
 // 頁面載入時就初始化 Firebase，確保點「建立遊戲」時連線已就緒
 (function initFirebaseEarly() {
@@ -98,7 +101,6 @@ function isGameStarted() {
 function readRuleOptions() {
   gameRules.anqiChain = !!document.getElementById("ruleAnqiChain")?.checked;
   gameRules.carHorseSpecial = !!document.getElementById("ruleCarHorse")?.checked;
-  gameMode = document.getElementById("ruleVsAI")?.checked ? "vsAI" : "twoPlayer";
   aiDifficulty = document.getElementById("ruleAIDifficulty")?.value || "easy";
 }
 
@@ -228,6 +230,11 @@ function getSerializedState() {
     moveHistory: moveHistory.slice(),
     capturedPieces: { red: capturedRed, black: capturedBlack },
     gameOver,
+    lastWinnerPlayer: lastWinnerPlayer ?? null,
+    rematch: {
+      p1: !!onlineRematchState.p1,
+      p2: !!onlineRematchState.p2,
+    },
     gameRules: { anqiChain: gameRules.anqiChain, carHorseSpecial: gameRules.carHorseSpecial },
     selectedCell: selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null,
     chainCaptureActive,
@@ -236,6 +243,8 @@ function getSerializedState() {
 
 function setStateFromSerialized(data) {
   if (!data || !data.board) return;
+  const prevActivePlayer = activePlayer;
+  const prevGameOver = gameOver;
   const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
   board = data.board.map((row) =>
     row.map((cell) => {
@@ -268,6 +277,11 @@ function setStateFromSerialized(data) {
   capturedPieces.black = (data.capturedPieces?.black || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
   const incomingGameOver = !!data.gameOver;
   gameOver = gameOver || incomingGameOver;
+  lastWinnerPlayer = data.lastWinnerPlayer ?? lastWinnerPlayer;
+  onlineRematchState = {
+    p1: !!data.rematch?.p1,
+    p2: !!data.rematch?.p2,
+  };
   if (data.gameRules) {
     gameRules.anqiChain = !!data.gameRules.anqiChain;
     gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
@@ -302,6 +316,17 @@ function setStateFromSerialized(data) {
   renderHistory();
   updateStatus();
   updateRuleOptionsDisabled();
+
+  if (!gameOver && prevActivePlayer !== activePlayer) {
+    startTimer(true);
+  }
+  if (gameOver && !prevGameOver) {
+    showGameOverModal(lastWinnerPlayer);
+  }
+  if (!gameOver && prevGameOver) {
+    hideGameOverModal();
+    startTimer(true);
+  }
 }
 
 function getRealtimeDb() {
@@ -532,6 +557,7 @@ function startOnlineListener() {
     if (myPlayerNumber === 1 && !data.player2Id) return;
     setStateFromSerialized(data);
     if (myPlayerNumber === 1 && data.player2Id) hideModeModal();
+    maybeStartOnlineRematchFromData(data);
   };
   ref.on("value", onValue, (err) => console.warn("RTDB listener error", err));
   firestoreUnsubscribe = () => ref.off("value", onValue);
@@ -546,6 +572,78 @@ function syncOnlineState() {
   db.ref(`banqi_games/${onlineGameId}`).update(state).catch((err) => console.warn("Sync failed", err));
 }
 
+function showRematchWaitingUI(show) {
+  const waitEl = document.getElementById("gameOverWaiting");
+  const cancelBtn = document.getElementById("gameOverCancelWait");
+  if (waitEl) waitEl.style.display = show ? "block" : "none";
+  if (cancelBtn) cancelBtn.style.display = show ? "" : "none";
+  onlineRematchWaiting = show;
+}
+
+function requestOnlineRematch() {
+  if (gameMode !== "online" || !onlineGameId || !myPlayerNumber) return;
+  const db = getRealtimeDb();
+  if (!db) return;
+  const key = myPlayerNumber === 1 ? "p1" : "p2";
+  onlineRematchState[key] = true;
+  db.ref(`banqi_games/${onlineGameId}/rematch`).update({ [key]: true }).catch((err) => {
+    console.warn("Rematch request failed", err);
+  });
+  showRematchWaitingUI(true);
+}
+
+function cancelOnlineRematch() {
+  if (gameMode !== "online" || !onlineGameId || !myPlayerNumber) return;
+  const db = getRealtimeDb();
+  if (!db) return;
+  const key = myPlayerNumber === 1 ? "p1" : "p2";
+  onlineRematchState[key] = false;
+  db.ref(`banqi_games/${onlineGameId}/rematch`).update({ [key]: false }).catch((err) => {
+    console.warn("Cancel rematch failed", err);
+  });
+  showRematchWaitingUI(false);
+}
+
+function maybeStartOnlineRematchFromData(data) {
+  const rematch = data?.rematch || {};
+  const p1Ready = !!rematch.p1;
+  const p2Ready = !!rematch.p2;
+  onlineRematchState = { p1: p1Ready, p2: p2Ready };
+
+  if (!(data?.gameOver)) return;
+
+  const myKey = myPlayerNumber === 1 ? "p1" : "p2";
+  const myReady = !!rematch[myKey];
+  if (myReady && !(p1Ready && p2Ready)) {
+    showRematchWaitingUI(true);
+  } else {
+    showRematchWaitingUI(false);
+  }
+
+  if (myPlayerNumber === 1 && p1Ready && p2Ready) {
+    const db = getRealtimeDb();
+    if (!db || !onlineGameId) return;
+
+    // Host starts the next round, keeping names/avatars/rules.
+    initBoard();
+    activePlayer = 1;
+    playerColors = { 1: null, 2: null };
+    selectedCell = null;
+    chainCaptureActive = false;
+    gameOver = false;
+    lastWinnerPlayer = null;
+    moveHistory = [];
+    capturedPieces = { red: [], black: [] };
+    onlineRematchState = { p1: false, p2: false };
+    const state = getSerializedState();
+    state.player1Id = data.player1Id || null;
+    state.player2Id = data.player2Id || null;
+    state.createdAt = data.createdAt || Date.now();
+    state.rematch = { p1: false, p2: false };
+    db.ref(`banqi_games/${onlineGameId}`).set(state).catch((err) => console.warn("Start rematch failed", err));
+  }
+}
+
 function leaveOnlineGame() {
   if (firestoreUnsubscribe) {
     firestoreUnsubscribe();
@@ -553,6 +651,8 @@ function leaveOnlineGame() {
   }
   onlineGameId = null;
   myPlayerNumber = null;
+  onlineRematchState = { p1: false, p2: false };
+  showRematchWaitingUI(false);
   if (gameMode === "online") gameMode = "twoPlayer";
 }
 
@@ -686,12 +786,21 @@ function showProfileStep(context, payload = null) {
 
   const p1Group = document.getElementById("profilePlayer1Group");
   const p2Group = document.getElementById("profilePlayer2Group");
+  const hostRulesGroup = document.getElementById("profileHostRulesGroup");
   if (p1Group) p1Group.style.display = "";
   if (p2Group) p2Group.style.display = "";
+  if (hostRulesGroup) hostRulesGroup.style.display = "none";
   if (context === "vsAI" || context === "onlineHost") {
     if (p2Group) p2Group.style.display = "none";
   } else if (context === "onlineJoin") {
     if (p1Group) p1Group.style.display = "none";
+  }
+  if (context === "onlineHost" && hostRulesGroup) {
+    hostRulesGroup.style.display = "";
+    const anqi = document.getElementById("profileRuleAnqiChain");
+    const carHorse = document.getElementById("profileRuleCarHorse");
+    if (anqi) anqi.checked = !!gameRules.anqiChain;
+    if (carHorse) carHorse.checked = !!gameRules.carHorseSpecial;
   }
 
   const errEl = document.getElementById("modeProfileError");
@@ -785,15 +894,25 @@ function hideModeModal() {
 }
 
 function showGameOverModal(winnerPlayer) {
-  const name = getPlayerName(winnerPlayer);
+  const name = winnerPlayer ? getPlayerName(winnerPlayer) : "本局";
   const msgEl = document.getElementById("gameOverMessage");
   const modal = document.getElementById("gameOverModal");
-  if (msgEl) msgEl.textContent = `恭喜 ${name} 贏得比賽`;
+  const waitEl = document.getElementById("gameOverWaiting");
+  const cancelWaitBtn = document.getElementById("gameOverCancelWait");
+  if (msgEl) msgEl.textContent = winnerPlayer ? `恭喜 ${name} 贏得比賽` : "本局結束";
+  if (waitEl) waitEl.style.display = "none";
+  if (cancelWaitBtn) cancelWaitBtn.style.display = "none";
+  onlineRematchWaiting = false;
   if (modal) modal.classList.add("modal-open");
 }
 
 function hideGameOverModal() {
   const modal = document.getElementById("gameOverModal");
+  const waitEl = document.getElementById("gameOverWaiting");
+  const cancelWaitBtn = document.getElementById("gameOverCancelWait");
+  if (waitEl) waitEl.style.display = "none";
+  if (cancelWaitBtn) cancelWaitBtn.style.display = "none";
+  onlineRematchWaiting = false;
   if (modal) modal.classList.remove("modal-open");
 }
 
@@ -883,24 +1002,15 @@ function updateTimerDisplay() {
 function handleTimeout() {
   if (gameOver) return;
 
-  const loserPlayer = activePlayer;
-  const winnerPlayer = activePlayer === 1 ? 2 : 1;
-  recordWin(winnerPlayer);
+  const skippedPlayer = activePlayer;
   const statusEl = document.getElementById("status");
-  const loserName = getPlayerName(loserPlayer);
-  const winnerName = getPlayerName(winnerPlayer);
+  const skippedName = getPlayerName(skippedPlayer);
 
   if (statusEl) {
-    statusEl.innerHTML = `<span class="status-win">${winnerName} 獲勝！</span> ${loserName} 超時未移動。`;
+    statusEl.innerHTML = `<span class="status-warning">${skippedName} 超時未移動，回合已跳過。</span>`;
   }
-
-  gameOver = true;
-  if (timerId !== null) {
-    clearInterval(timerId);
-    timerId = null;
-  }
-  showGameOverModal(winnerPlayer);
-  if (gameMode === "online") syncOnlineState();
+  addHistoryEntry(skippedPlayer, `${skippedName} 超時，回合被跳過。`);
+  endTurn();
 }
 
 function startTimer(reset = true) {
@@ -1647,6 +1757,7 @@ function checkGameOver() {
   if (!opponentHasPieces) {
     gameOver = true;
     const winnerPlayer = activePlayer;
+    lastWinnerPlayer = winnerPlayer;
     const loserPlayer = activePlayer === 1 ? 2 : 1;
     recordWin(winnerPlayer);
     const statusEl = document.getElementById("status");
@@ -1662,6 +1773,7 @@ function checkGameOver() {
   } else if (!currentHasMoves) {
     gameOver = true;
     const winnerPlayer = activePlayer === 1 ? 2 : 1;
+    lastWinnerPlayer = winnerPlayer;
     const loserPlayer = activePlayer;
     recordWin(winnerPlayer);
     const statusEl = document.getElementById("status");
@@ -1911,6 +2023,7 @@ function surrenderPlayer(playerNumber) {
   }
 
   gameOver = true;
+  lastWinnerPlayer = winnerPlayer;
   if (timerId !== null) {
     clearInterval(timerId);
     timerId = null;
@@ -1930,6 +2043,8 @@ function restartGame() {
   playerColors = { 1: null, 2: null };
   selectedCell = null;
   gameOver = false;
+  lastWinnerPlayer = null;
+  onlineRematchState = { p1: false, p2: false };
   moveHistory = [];
   renderHistory();
   if (timerId !== null) {
@@ -2097,6 +2212,14 @@ function setup() {
       } else if (pendingProfileContext === "onlineHost") {
         setModeWithRecordReset("online");
         profileLocked = { 1: true, 2: false };
+        const anqi = document.getElementById("profileRuleAnqiChain");
+        const carHorse = document.getElementById("profileRuleCarHorse");
+        gameRules.anqiChain = !!anqi?.checked;
+        gameRules.carHorseSpecial = !!carHorse?.checked;
+        const ruleAnqi = document.getElementById("ruleAnqiChain");
+        const ruleCarHorse = document.getElementById("ruleCarHorse");
+        if (ruleAnqi) ruleAnqi.checked = gameRules.anqiChain;
+        if (ruleCarHorse) ruleCarHorse.checked = gameRules.carHorseSpecial;
         document.getElementById("modeModalStepProfile").style.display = "none";
         document.getElementById("modeModalStepOnline").style.display = "";
         createOnlineGame();
@@ -2129,6 +2252,23 @@ function setup() {
   const gameOverAgainBtn = document.getElementById("gameOverAgain");
   if (gameOverAgainBtn) {
     gameOverAgainBtn.addEventListener("click", () => {
+      if (gameMode === "online") {
+        requestOnlineRematch();
+      } else {
+        restartGame();
+        showModeModal();
+      }
+    });
+  }
+  const gameOverCancelWaitBtn = document.getElementById("gameOverCancelWait");
+  if (gameOverCancelWaitBtn) {
+    gameOverCancelWaitBtn.addEventListener("click", () => {
+      if (gameMode === "online") cancelOnlineRematch();
+    });
+  }
+  const gameOverEndBtn = document.getElementById("gameOverEnd");
+  if (gameOverEndBtn) {
+    gameOverEndBtn.addEventListener("click", () => {
       if (gameMode === "online") leaveOnlineGame();
       restartGame();
       showModeModal();
