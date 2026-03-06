@@ -66,6 +66,9 @@ let chainCaptureActive = false; // 暗棋連吃時此回合只能移動同一子
 let capturedPieces = { red: [], black: [] };
 let lastCapturedCount = { red: 0, black: 0 };
 let pendingCaptureFly = null; // { startRect: DOMRect, piece } for fly-from-board animation
+let profileLocked = { 1: false, 2: false };
+let pendingProfileContext = null; // "twoPlayer" | "vsAI" | "onlineHost" | "onlineJoin"
+let pendingProfilePayload = null;
 
 // 頁面載入時就初始化 Firebase，確保點「建立遊戲」時連線已就緒
 (function initFirebaseEarly() {
@@ -137,6 +140,13 @@ function renderRecord() {
   const el2 = document.getElementById("record2");
   if (el1) el1.innerHTML = `勝 <span class="number">${winRecord[1] || 0}</span> 敗 <span class="number">${lossRecord[1] || 0}</span>`;
   if (el2) el2.innerHTML = `勝 <span class="number">${winRecord[2] || 0}</span> 敗 <span class="number">${lossRecord[2] || 0}</span>`;
+}
+
+function resetRecord() {
+  winRecord = { 1: 0, 2: 0 };
+  lossRecord = { 1: 0, 2: 0 };
+  saveRecord();
+  renderRecord();
 }
 
 function createInitialPieces() {
@@ -279,6 +289,12 @@ function setStateFromSerialized(data) {
   const avatarSelect2 = document.getElementById("player2Avatar");
   if (avatarSelect1) avatarSelect1.value = playerAvatars[1] || "";
   if (avatarSelect2) avatarSelect2.value = playerAvatars[2] || "";
+
+  if (gameMode === "online") {
+    if (playerNames[1] && playerAvatars[1]) profileLocked[1] = true;
+    if (playerNames[2] && playerAvatars[2]) profileLocked[2] = true;
+  }
+  applyAllProfileDisplays();
   renderAvatarPreview(1);
   renderAvatarPreview(2);
 
@@ -408,7 +424,6 @@ function createOnlineGame() {
     alert("請先設定 Firebase Realtime Database：請確認已啟用 Realtime Database，並在 firebase-config.js 設定 databaseURL。");
     return;
   }
-  alert("正在建立線上對戰房間，請稍候…");
   resetForNewOnlineRoomAsHost();
   const code = generateGameCode();
   const player1Id = "p1-" + Math.random().toString(36).slice(2, 12);
@@ -430,9 +445,7 @@ function createOnlineGame() {
     if (actions) actions.style.display = "none";
     document.getElementById("onlineGameCode").textContent = code;
     document.getElementById("modeModalBackOnline").style.display = "none";
-    alert("線上對戰已建立！房間代碼： " + code + "\n請把此代碼傳給家人，在「線上對戰 → 加入遊戲」輸入。");
     startOnlineListener();
-    ensureProfilesReadyForCurrentContext(true);
   }).catch((err) => {
     console.error("建立遊戲失敗", err);
     alert("建立遊戲失敗：" + (err.message || err));
@@ -501,7 +514,6 @@ function joinOnlineGame(code) {
       document.getElementById("onlineJoinError").style.display = "none";
       setStateFromSerialized(finalData);
       startOnlineListener();
-      ensureProfilesReadyForCurrentContext(true);
     }, false);
   }).catch((err) => {
     document.getElementById("onlineJoinError").textContent = "無法連線：" + (err.message || err);
@@ -616,14 +628,154 @@ function assignRandomAINameAndAvatar() {
   renderAvatarPreview(2);
 }
 
+function getAvatarName(avatarId) {
+  if (!avatarId) return "";
+  return CHARACTERS[avatarId]?.name || "";
+}
+
+function applyProfileDisplayForPlayer(playerNumber) {
+  const fieldEl = document.getElementById(playerNumber === 1 ? "player1Field" : "player2Field");
+  const avatarCtrlEl = document.getElementById(playerNumber === 1 ? "player1AvatarControl" : "player2AvatarControl");
+  const identityEl = document.getElementById(playerNumber === 1 ? "player1Identity" : "player2Identity");
+  if (!fieldEl || !avatarCtrlEl || !identityEl) return;
+
+  if (profileLocked[playerNumber]) {
+    fieldEl.style.display = "none";
+    avatarCtrlEl.style.display = "none";
+    const name = playerNames[playerNumber] || `玩家 ${playerNumber}`;
+    identityEl.textContent = name;
+    identityEl.style.display = "";
+  } else {
+    fieldEl.style.display = "";
+    avatarCtrlEl.style.display = "";
+    identityEl.style.display = "none";
+    identityEl.textContent = "";
+  }
+}
+
+function applyAllProfileDisplays() {
+  applyProfileDisplayForPlayer(1);
+  applyProfileDisplayForPlayer(2);
+}
+
+function setModeWithRecordReset(nextMode) {
+  if (gameMode !== nextMode) {
+    resetRecord();
+  }
+  gameMode = nextMode;
+}
+
+function resetOnlineModalUI() {
+  document.getElementById("onlineCreateArea").style.display = "none";
+  document.getElementById("onlineJoinArea").style.display = "none";
+  const actions = document.querySelector("#modeModalStepOnline .modal-actions");
+  if (actions) actions.style.display = "";
+  document.getElementById("modeModalBackOnline").style.display = "";
+  const joinErr = document.getElementById("onlineJoinError");
+  if (joinErr) joinErr.style.display = "none";
+}
+
+function showProfileStep(context, payload = null) {
+  pendingProfileContext = context;
+  pendingProfilePayload = payload;
+
+  document.getElementById("modeModalStep1").style.display = "none";
+  document.getElementById("modeModalStep2").style.display = "none";
+  document.getElementById("modeModalStepOnline").style.display = "none";
+  document.getElementById("modeModalStepProfile").style.display = "";
+
+  const p1Group = document.getElementById("profilePlayer1Group");
+  const p2Group = document.getElementById("profilePlayer2Group");
+  if (p1Group) p1Group.style.display = "";
+  if (p2Group) p2Group.style.display = "";
+  if (context === "vsAI" || context === "onlineHost") {
+    if (p2Group) p2Group.style.display = "none";
+  } else if (context === "onlineJoin") {
+    if (p1Group) p1Group.style.display = "none";
+  }
+
+  const errEl = document.getElementById("modeProfileError");
+  if (errEl) errEl.style.display = "none";
+
+  const p1Name = document.getElementById("profilePlayer1Name");
+  const p2Name = document.getElementById("profilePlayer2Name");
+  const p1Avatar = document.getElementById("profilePlayer1Avatar");
+  const p2Avatar = document.getElementById("profilePlayer2Avatar");
+  if (p1Name) p1Name.value = playerNames[1] || "";
+  if (p2Name) p2Name.value = playerNames[2] || "";
+  if (p1Avatar) p1Avatar.value = playerAvatars[1] || "";
+  if (p2Avatar) p2Avatar.value = playerAvatars[2] || "";
+}
+
+function applyProfileToBoards() {
+  const p1Name = document.getElementById("profilePlayer1Name");
+  const p2Name = document.getElementById("profilePlayer2Name");
+  const p1Avatar = document.getElementById("profilePlayer1Avatar");
+  const p2Avatar = document.getElementById("profilePlayer2Avatar");
+
+  if (pendingProfileContext !== "onlineJoin") {
+    playerNames[1] = p1Name ? String(p1Name.value || "").trim() : playerNames[1];
+    playerAvatars[1] = p1Avatar ? String(p1Avatar.value || "").trim() : playerAvatars[1];
+  }
+  if (pendingProfileContext !== "onlineHost" && pendingProfileContext !== "vsAI") {
+    playerNames[2] = p2Name ? String(p2Name.value || "").trim() : playerNames[2];
+    playerAvatars[2] = p2Avatar ? String(p2Avatar.value || "").trim() : playerAvatars[2];
+  }
+
+  const input1 = document.getElementById("player1Name");
+  const input2 = document.getElementById("player2Name");
+  const avatar1 = document.getElementById("player1Avatar");
+  const avatar2 = document.getElementById("player2Avatar");
+  if (input1) input1.value = playerNames[1] || "";
+  if (input2) input2.value = playerNames[2] || "";
+  if (avatar1) avatar1.value = playerAvatars[1] || "";
+  if (avatar2) avatar2.value = playerAvatars[2] || "";
+  renderAvatarPreview(1);
+  renderAvatarPreview(2);
+}
+
+function validateProfileModal() {
+  const errEl = document.getElementById("modeProfileError");
+  let msg = "";
+  const p1Name = String(document.getElementById("profilePlayer1Name")?.value || "").trim();
+  const p2Name = String(document.getElementById("profilePlayer2Name")?.value || "").trim();
+  const p1Avatar = String(document.getElementById("profilePlayer1Avatar")?.value || "").trim();
+  const p2Avatar = String(document.getElementById("profilePlayer2Avatar")?.value || "").trim();
+
+  if (pendingProfileContext === "twoPlayer") {
+    if (!p1Name || !p2Name) msg = "請填寫兩位玩家名稱。";
+    else if (!p1Avatar || !p2Avatar) msg = "請為兩位玩家選擇角色。";
+  } else if (pendingProfileContext === "vsAI" || pendingProfileContext === "onlineHost") {
+    if (!p1Name) msg = "請填寫玩家 1 名稱。";
+    else if (!p1Avatar) msg = "請為玩家 1 選擇角色。";
+  } else if (pendingProfileContext === "onlineJoin") {
+    if (!p2Name) msg = "請填寫玩家 2 名稱。";
+    else if (!p2Avatar) msg = "請為玩家 2 選擇角色。";
+  }
+
+  if (errEl) {
+    if (msg) {
+      errEl.textContent = msg;
+      errEl.style.display = "block";
+    } else {
+      errEl.style.display = "none";
+    }
+  }
+  return !msg;
+}
+
 function showModeModal() {
   const el = document.getElementById("modeModal");
   const step1 = document.getElementById("modeModalStep1");
   const step2 = document.getElementById("modeModalStep2");
   const stepOnline = document.getElementById("modeModalStepOnline");
+  const stepProfile = document.getElementById("modeModalStepProfile");
   if (step1) step1.style.display = "";
   if (step2) step2.style.display = "none";
   if (stepOnline) stepOnline.style.display = "none";
+  if (stepProfile) stepProfile.style.display = "none";
+  profileLocked = { 1: false, 2: false };
+  applyAllProfileDisplays();
   if (el) el.classList.add("modal-open");
 }
 
@@ -739,7 +891,7 @@ function handleTimeout() {
   const winnerName = getPlayerName(winnerPlayer);
 
   if (statusEl) {
-    statusEl.innerHTML = `<span class="status-win">${winnerName} 獲勝！</span> ${loserName} 超時未落子。`;
+    statusEl.innerHTML = `<span class="status-win">${winnerName} 獲勝！</span> ${loserName} 超時未移動。`;
   }
 
   gameOver = true;
@@ -794,7 +946,10 @@ function isInsideBoard(row, col) {
 
 function handleCellClick(row, col) {
   if (gameOver || isPaused) return;
-  if (!ensureProfilesReadyForCurrentContext(true)) return;
+  if (!ensureProfilesReadyForCurrentContext(false)) {
+    showTemporaryStatus("請先完成玩家名稱與角色設定。", "status-warning");
+    return;
+  }
   if (gameMode === "vsAI" && activePlayer === 2) return;
   if (gameMode === "online" && activePlayer !== myPlayerNumber) return;
 
@@ -950,12 +1105,12 @@ function attemptMove(from, to) {
       }
     } else if (gameRules.carHorseSpecial && isChariot) {
       if (!isAdjacent(from, to)) {
-        showTemporaryStatus("車飛馬斜：車吃子時可沿直線飛，移動到空位時只能走一格。", "status-warning");
+        showTemporaryStatus("車飛馬斜：車吃棋時可沿直線飛，移動到空位時只能走一格。", "status-warning");
         return;
       }
     } else if (gameRules.carHorseSpecial && isHorse) {
       if (!isAdjacent(from, to)) {
-        showTemporaryStatus("車飛馬斜：馬吃子時可走斜角，移動到空位時只能走一格。", "status-warning");
+        showTemporaryStatus("車飛馬斜：馬吃棋時可走斜角，移動到空位時只能走一格。", "status-warning");
         return;
       }
     } else if (!isAdjacent(from, to)) {
@@ -999,7 +1154,7 @@ function attemptMove(from, to) {
         return;
       }
       if (!canCapture(movingPiece, targetPiece)) {
-        showTemporaryStatus("這步吃子不符合大小規則。", "status-warning");
+        showTemporaryStatus("這步吃棋不符合大小規則。", "status-warning");
         targetPiece.faceUp = false;
         return;
       }
@@ -1041,7 +1196,7 @@ function attemptMove(from, to) {
 
   if (targetPiece.color === movingPiece.color) {
     if (gameRules.anqiChain && chainCaptureActive) {
-      showTemporaryStatus("暗棋連吃時，此回合只能繼續移動同一子。", "status-warning");
+      showTemporaryStatus("暗棋連吃時，此回合只能繼續移動同一棋。", "status-warning");
       return;
     }
     selectedCell = { row: to.row, col: to.col };
@@ -1052,31 +1207,31 @@ function attemptMove(from, to) {
 
   if (isCannon) {
     if (!isStraightLine(from, to)) {
-      showTemporaryStatus("炮吃子必須沿直線跳過一枚棋子。", "status-warning");
+      showTemporaryStatus("炮吃棋必須沿直線跳過一枚棋子。", "status-warning");
       return;
     }
     const between = countPiecesBetween(from, to);
     if (between !== 1) {
-      showTemporaryStatus("炮吃子時，炮與目標之間必須剛好隔一枚棋子。", "status-warning");
+      showTemporaryStatus("炮吃棋時，炮與目標之間必須剛好隔一枚棋子。", "status-warning");
       return;
     }
   } else if (gameRules.carHorseSpecial && isChariot) {
     if (!isStraightLine(from, to) || countPiecesBetween(from, to) !== 0) {
-      showTemporaryStatus("車飛馬斜吃子：車沿直線，中間不能有子。", "status-warning");
+      showTemporaryStatus("車飛馬斜吃棋：車沿直線，中間不能有棋。", "status-warning");
       return;
     }
   } else if (gameRules.carHorseSpecial && isHorse) {
     if (!isDiagonalOneStep(from, to)) {
-      showTemporaryStatus("車飛馬斜：馬只能以斜角一格吃子。", "status-warning");
+      showTemporaryStatus("車飛馬斜：馬只能以斜角一格吃棋。", "status-warning");
       return;
     }
   } else if (!isAdjacent(from, to)) {
-    showTemporaryStatus("吃子須相鄰（或開啟車飛馬斜）。", "status-warning");
+    showTemporaryStatus("吃棋須相鄰（或開啟車飛馬斜）。", "status-warning");
     return;
   }
 
   if (!canCapture(movingPiece, targetPiece)) {
-    showTemporaryStatus("這步吃子不符合大小規則。", "status-warning");
+    showTemporaryStatus("這步吃棋不符合大小規則。", "status-warning");
     return;
   }
 
@@ -1722,7 +1877,7 @@ function updateStatus() {
   const currentColor = getCurrentPlayerColor();
   const colorLabel = currentColor === "red" ? "紅方" : "黑方";
   const name = getPlayerName(activePlayer);
-  statusEl.innerHTML = `<span class="status-highlight">${name}（${colorLabel}）</span>，輪到你走棋，可以翻一子或走一子。`;
+  statusEl.innerHTML = `<span class="status-highlight">${name}（${colorLabel}）</span>，輪到你走棋，可以翻一棋或移動一棋。`;
 }
 
 function showTemporaryStatus(message, cssClass) {
@@ -1803,12 +1958,7 @@ function setup() {
   const modeVsAIBtn = document.getElementById("modeVsAI");
   if (modeTwoPlayerBtn) {
     modeTwoPlayerBtn.addEventListener("click", () => {
-      hideModeModal();
-      gameMode = "twoPlayer";
-      const cb = document.getElementById("ruleVsAI");
-      if (cb) cb.checked = false;
-      readRuleOptions();
-      ensureProfilesReadyForCurrentContext(true);
+      showProfileStep("twoPlayer");
     });
   }
   if (modeVsAIBtn) {
@@ -1825,12 +1975,7 @@ function setup() {
       document.getElementById("modeModalStep2").style.display = "none";
       const stepOnline = document.getElementById("modeModalStepOnline");
       if (stepOnline) stepOnline.style.display = "";
-      document.getElementById("onlineCreateArea").style.display = "none";
-      document.getElementById("onlineJoinArea").style.display = "none";
-      const actions = document.querySelector("#modeModalStepOnline .modal-actions");
-      if (actions) actions.style.display = "";
-      document.getElementById("modeModalBackOnline").style.display = "";
-      document.getElementById("onlineJoinError").style.display = "none";
+      resetOnlineModalUI();
       const codeInput = document.getElementById("onlineCodeInput");
       if (codeInput) codeInput.value = "";
     });
@@ -1839,7 +1984,7 @@ function setup() {
   const onlineCreateBtn = document.getElementById("onlineCreate");
   if (onlineCreateBtn) {
     onlineCreateBtn.addEventListener("click", () => {
-      createOnlineGame();
+      showProfileStep("onlineHost");
     });
   }
 
@@ -1857,7 +2002,21 @@ function setup() {
     onlineJoinSubmitBtn.addEventListener("click", () => {
       const input = document.getElementById("onlineCodeInput");
       const code = input ? input.value.trim().toUpperCase() : "";
-      joinOnlineGame(code);
+      if (code.length !== 6) {
+        document.getElementById("onlineJoinError").textContent = "請輸入 6 位代碼";
+        document.getElementById("onlineJoinError").style.display = "block";
+        return;
+      }
+      showProfileStep("onlineJoin", { code });
+    });
+  }
+
+  const onlineCancelCreateBtn = document.getElementById("onlineCancelCreate");
+  if (onlineCancelCreateBtn) {
+    onlineCancelCreateBtn.addEventListener("click", () => {
+      leaveOnlineGame();
+      showModeModal();
+      resetOnlineModalUI();
     });
   }
 
@@ -1910,15 +2069,62 @@ function setup() {
         if (select) select.value = level;
         aiDifficulty = level;
       }
-      hideModeModal();
-      gameMode = "vsAI";
-      const cb = document.getElementById("ruleVsAI");
-      if (cb) cb.checked = true;
-      readRuleOptions();
-      assignRandomAINameAndAvatar();
-      ensureProfilesReadyForCurrentContext(true);
+      showProfileStep("vsAI", { level });
     });
   });
+
+  const modeProfileStart = document.getElementById("modeProfileStart");
+  if (modeProfileStart) {
+    modeProfileStart.addEventListener("click", () => {
+      if (!validateProfileModal()) return;
+      applyProfileToBoards();
+
+      if (pendingProfileContext === "twoPlayer") {
+        setModeWithRecordReset("twoPlayer");
+        profileLocked = { 1: true, 2: true };
+        const cb = document.getElementById("ruleVsAI");
+        if (cb) cb.checked = false;
+        restartGame();
+        hideModeModal();
+      } else if (pendingProfileContext === "vsAI") {
+        setModeWithRecordReset("vsAI");
+        profileLocked = { 1: true, 2: true };
+        const cb = document.getElementById("ruleVsAI");
+        if (cb) cb.checked = true;
+        assignRandomAINameAndAvatar();
+        restartGame();
+        hideModeModal();
+      } else if (pendingProfileContext === "onlineHost") {
+        setModeWithRecordReset("online");
+        profileLocked = { 1: true, 2: false };
+        document.getElementById("modeModalStepProfile").style.display = "none";
+        document.getElementById("modeModalStepOnline").style.display = "";
+        createOnlineGame();
+      } else if (pendingProfileContext === "onlineJoin") {
+        setModeWithRecordReset("online");
+        profileLocked = { 1: false, 2: true };
+        const code = pendingProfilePayload?.code || "";
+        joinOnlineGame(code);
+      }
+
+      applyAllProfileDisplays();
+      updateStatus();
+    });
+  }
+
+  const modeProfileBack = document.getElementById("modeProfileBack");
+  if (modeProfileBack) {
+    modeProfileBack.addEventListener("click", () => {
+      document.getElementById("modeModalStepProfile").style.display = "none";
+      if (pendingProfileContext === "vsAI") {
+        document.getElementById("modeModalStep2").style.display = "";
+      } else if (pendingProfileContext === "onlineHost" || pendingProfileContext === "onlineJoin") {
+        document.getElementById("modeModalStepOnline").style.display = "";
+      } else {
+        document.getElementById("modeModalStep1").style.display = "";
+      }
+    });
+  }
 
   const gameOverAgainBtn = document.getElementById("gameOverAgain");
   if (gameOverAgainBtn) {
@@ -2007,6 +2213,7 @@ function setup() {
     playerAvatars[2] = avatarSelect2.value || "";
     renderAvatarPreview(2);
   }
+  applyAllProfileDisplays();
 
   const pauseBtn = document.getElementById("pauseBtn");
   if (pauseBtn) {

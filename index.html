@@ -2,7 +2,7 @@
 <html lang="zh-Hant-TW">
   <head>
     <meta charset="UTF-8" />
-    <title>廖家暗棋 v0.5</title>
+    <title>廖家暗棋大戰</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="style.css" />
     <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet" />
@@ -38,9 +38,10 @@
           <button type="button" id="onlineJoin" class="btn btn-modal">加入遊戲</button>
         </div>
         <div id="onlineCreateArea" style="display: none;">
-          <p class="modal-message">邀請家人輸入此代碼加入：</p>
+          <p class="modal-message">邀請對手輸入此代碼加入：</p>
           <p id="onlineGameCode" class="game-code"></p>
           <button type="button" id="onlineCopyCode" class="btn btn-ghost">複製代碼</button>
+          <button type="button" id="onlineCancelCreate" class="btn btn-ghost">取消</button>
           <p id="onlineWaiting" class="modal-waiting">等待對手加入…</p>
         </div>
         <div id="onlineJoinArea" style="display: none;">
@@ -50,6 +51,48 @@
           <p id="onlineJoinError" class="modal-error" style="display: none;"></p>
         </div>
         <button type="button" id="modeModalBackOnline" class="btn btn-ghost modal-back">返回</button>
+      </div>
+      <div id="modeModalStepProfile" class="modal-box" style="display: none;">
+        <h2 class="modal-title">設定玩家資訊</h2>
+        <div id="profilePlayer1Group" class="profile-group">
+          <label for="profilePlayer1Name">玩家 1 名稱</label>
+          <input id="profilePlayer1Name" type="text" class="game-code-input" placeholder="請輸入名稱" maxlength="16" />
+          <label for="profilePlayer1Avatar">玩家 1 角色</label>
+          <select id="profilePlayer1Avatar" class="rule-select">
+            <option value="">請選擇角色</option>
+            <option value="liubei">劉備</option>
+            <option value="guanyu">關羽</option>
+            <option value="zhangfei">張飛</option>
+            <option value="caocao">曹操</option>
+            <option value="sunquan">孫權</option>
+            <option value="huangyueying">黃月英</option>
+            <option value="xiaoqiao">小喬</option>
+            <option value="daqiao">大喬</option>
+            <option value="kimmy">奇米</option>
+          </select>
+        </div>
+        <div id="profilePlayer2Group" class="profile-group">
+          <label for="profilePlayer2Name">玩家 2 名稱</label>
+          <input id="profilePlayer2Name" type="text" class="game-code-input" placeholder="請輸入名稱" maxlength="16" />
+          <label for="profilePlayer2Avatar">玩家 2 角色</label>
+          <select id="profilePlayer2Avatar" class="rule-select">
+            <option value="">請選擇角色</option>
+            <option value="liubei">劉備</option>
+            <option value="guanyu">關羽</option>
+            <option value="zhangfei">張飛</option>
+            <option value="caocao">曹操</option>
+            <option value="sunquan">孫權</option>
+            <option value="huangyueying">黃月英</option>
+            <option value="xiaoqiao">小喬</option>
+            <option value="daqiao">大喬</option>
+            <option value="kimmy">奇米</option>
+          </select>
+        </div>
+        <p id="modeProfileError" class="modal-error" style="display: none;"></p>
+        <div class="modal-actions">
+          <button type="button" id="modeProfileStart" class="btn btn-modal">開始遊戲</button>
+          <button type="button" id="modeProfileBack" class="btn btn-ghost modal-back">返回</button>
+        </div>
       </div>
     </div>
 
@@ -63,13 +106,13 @@
 
     <div class="app">
       <header class="header">
-        <h1>廖家暗棋 <span class="version">v0.5</span></h1>
+        <h1>廖家暗棋大戰 <span class="version">beta 1.0</span></h1>
       </header>
 
       <main class="main">
         <!-- Player 1 panel (left) -->
         <section class="panel panel-player panel-player1">
-          <div class="player-field">
+          <div class="player-field" id="player1Field">
             <label for="player1Name">名稱</label>
             <input
               id="player1Name"
@@ -78,8 +121,9 @@
               placeholder="請輸入名稱"
             />
           </div>
+          <div id="player1Identity" class="player-identity" style="display: none;"></div>
           <div id="record1" class="record-display"></div>
-          <div class="avatar-control">
+          <div class="avatar-control" id="player1AvatarControl">
             <label for="player1Avatar">角色</label>
             <select id="player1Avatar" class="avatar-select">
               <option value="">請選擇角色</option>
@@ -161,19 +205,19 @@
             <summary>玩法說明</summary>
             <ul>
               <li>棋盤為 4×8，共 32 枚棋子，開局全部蓋住並隨機擺放。</li>
-              <li>玩家 1 先翻任意一子；該子的顏色就是玩家 1 的陣營，另一種顏色歸玩家 2。</li>
+              <li>玩家 1 先翻任意一棋；該子的顏色就是玩家 1 的陣營，另一種顏色歸玩家 2。</li>
               <li>輪到你時，可翻開一枚蓋住的棋子，或將自己的一枚明子沿上下左右走一格。</li>
               <li>走到對方明子所在格為吃棋，依棋子階級比較，兵可以吃將／帥。</li>
             </ul>
             <p class="note">
-              「炮」吃子須沿直線跳過一枚棋子；平移時路徑上不能有棋子。上方可勾選：暗棋連吃、車飛馬斜。
+              「炮」吃棋須沿直線跳過一枚棋子；平移時路徑上不能有棋子。上方可勾選：暗棋連吃、車飛馬斜。
             </p>
           </details>
         </section>
 
         <!-- Player 2 panel (right) -->
         <section class="panel panel-player panel-player2">
-          <div class="player-field">
+          <div class="player-field" id="player2Field">
             <label for="player2Name">名稱</label>
             <input
               id="player2Name"
@@ -182,8 +226,9 @@
               placeholder="請輸入名稱"
             />
           </div>
+          <div id="player2Identity" class="player-identity" style="display: none;"></div>
           <div id="record2" class="record-display"></div>
-          <div class="avatar-control">
+          <div class="avatar-control" id="player2AvatarControl">
             <label for="player2Avatar">角色</label>
             <select id="player2Avatar" class="avatar-select">
               <option value="">請選擇角色</option>

@@ -149,6 +149,17 @@ body {
 .modal-error {
   color: #f87171;
 }
+.profile-group {
+  text-align: left;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.profile-group label {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
 
 /* Three columns: player1 | center (timer + board + instructions) | player2 */
 .main {
@@ -236,6 +247,15 @@ body {
   font-size: 0.85rem;
   color: #9ca3af;
   margin-top: 2px;
+}
+.player-identity {
+  margin-top: 2px;
+  margin-bottom: 4px;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: #f8fafc;
+  font-weight: 700;
+  text-align: center;
 }
 
 .panel-player .player-field {
