@@ -330,6 +330,12 @@ function createOnlineGame() {
   onlineGameId = code;
   gameMode = "online";
   const state = getSerializedState();
+  // Debug: help diagnose Firestore data issues (like nested arrays).
+  try {
+    console.log("createOnlineGame serialized state:", JSON.stringify(state));
+  } catch (e) {
+    console.log("createOnlineGame serialized state (stringify failed):", state, e);
+  }
   state.player1Id = player1Id;
   state.player2Id = null;
   state.createdAt = Date.now();
