@@ -361,6 +361,12 @@ function createOnlineGame() {
     if (actions) actions.style.display = "none";
     document.getElementById("onlineGameCode").textContent = code;
     document.getElementById("modeModalBackOnline").style.display = "none";
+    // 顯示提示，讓玩家一定注意到代碼。
+    try {
+      alert("線上對戰已建立！房間代碼： " + code + "。\n請把此代碼傳給家人，請他們在「線上對戰 → 加入遊戲」輸入。");
+    } catch (_) {
+      // ignore
+    }
     startOnlineListener();
   }).catch((err) => {
     alert("建立遊戲失敗：" + (err.message || err));
