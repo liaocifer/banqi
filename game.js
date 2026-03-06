@@ -243,7 +243,14 @@ function setStateFromSerialized(data) {
 }
 
 function getFirestore() {
-  if (!window.firebaseConfig || !window.firebase?.firestore) return null;
+  if (!window.firebaseConfig) {
+    console.warn("Firebase: firebase-config.js 未載入或未設定 window.firebaseConfig，請確認該檔案與 index.html 在同一層且已上傳到 GitHub。");
+    return null;
+  }
+  if (!window.firebase?.firestore) {
+    console.warn("Firebase: SDK 未載入（window.firebase 或 firestore 不存在），請檢查網路或是否被擴充功能阻擋。");
+    return null;
+  }
   if (!window._firestoreDb) {
     try {
       window.firebase.initializeApp(window.firebaseConfig);
@@ -266,7 +273,15 @@ function generateGameCode() {
 function createOnlineGame() {
   const db = getFirestore();
   if (!db) {
-    alert("請先設定 Firebase：複製 firebase-config.js.example 為 firebase-config.js 並填入你的專案設定。");
+    var msg = "無法使用線上對戰。";
+    if (!window.firebaseConfig) {
+      msg += " 請確認 firebase-config.js 已上傳到 GitHub 且與 index.html 同一層，並重新整理頁面（或用無痕模式試試）。";
+    } else if (!window.firebase || !window.firebase.firestore) {
+      msg += " Firebase SDK 未載入，請檢查網路或暫時關閉阻擋廣告／腳本的擴充功能。";
+    } else {
+      msg += " 請開啟開發者工具 (F12) 的 Console 查看錯誤訊息。";
+    }
+    alert(msg);
     return;
   }
   initBoard();
