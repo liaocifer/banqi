@@ -42,7 +42,7 @@ let selectedCell = null;
 let gameOver = false;
 
 let playerNames = { 1: "", 2: "" };
-let playerAvatars = { 1: "liubei", 2: "liubei" };
+let playerAvatars = { 1: "", 2: "" };
 let moveHistory = []; // { player: 1|2, text: string }[]
 let timerId = null;
 let remainingSeconds = 30;
@@ -214,7 +214,7 @@ function getSerializedState() {
     activePlayer,
     playerColors: { 1: playerColors[1], 2: playerColors[2] },
     playerNames: { 1: playerNames[1] || "", 2: playerNames[2] || "" },
-    playerAvatars: { 1: playerAvatars[1] || "liubei", 2: playerAvatars[2] || "liubei" },
+    playerAvatars: { 1: playerAvatars[1] || "", 2: playerAvatars[2] || "" },
     moveHistory: moveHistory.slice(),
     capturedPieces: { red: capturedRed, black: capturedBlack },
     gameOver,
@@ -277,8 +277,8 @@ function setStateFromSerialized(data) {
 
   const avatarSelect1 = document.getElementById("player1Avatar");
   const avatarSelect2 = document.getElementById("player2Avatar");
-  if (avatarSelect1 && playerAvatars[1]) avatarSelect1.value = playerAvatars[1];
-  if (avatarSelect2 && playerAvatars[2]) avatarSelect2.value = playerAvatars[2];
+  if (avatarSelect1) avatarSelect1.value = playerAvatars[1] || "";
+  if (avatarSelect2) avatarSelect2.value = playerAvatars[2] || "";
   renderAvatarPreview(1);
   renderAvatarPreview(2);
 
@@ -329,11 +329,11 @@ function refreshProfileFromInputs() {
 
   playerNames[1] = input1 ? String(input1.value || "").trim() : (playerNames[1] || "");
   playerNames[2] = input2 ? String(input2.value || "").trim() : (playerNames[2] || "");
-  playerAvatars[1] = avatar1?.value || playerAvatars[1] || "liubei";
-  playerAvatars[2] = avatar2?.value || playerAvatars[2] || "liubei";
+  playerAvatars[1] = avatar1 ? String(avatar1.value || "").trim() : (playerAvatars[1] || "");
+  playerAvatars[2] = avatar2 ? String(avatar2.value || "").trim() : (playerAvatars[2] || "");
 }
 
-function validateProfilesForMode(mode, role = "auto") {
+function validateProfilesForMode(mode, role = "auto", showAlert = true) {
   refreshProfileFromInputs();
   let needP1 = true;
   let needP2 = false;
@@ -353,26 +353,35 @@ function validateProfilesForMode(mode, role = "auto") {
   }
 
   if (needP1 && !playerNames[1]) {
-    alert("請先輸入玩家 1 名稱再開始。");
+    if (showAlert) alert("請先輸入玩家 1 名稱再開始。");
     document.getElementById("player1Name")?.focus();
     return false;
   }
   if (needP1 && !playerAvatars[1]) {
-    alert("請先為玩家 1 選擇角色。");
+    if (showAlert) alert("請先為玩家 1 選擇角色。");
     document.getElementById("player1Avatar")?.focus();
     return false;
   }
   if (needP2 && !playerNames[2]) {
-    alert("請先輸入玩家 2 名稱再開始。");
+    if (showAlert) alert("請先輸入玩家 2 名稱再開始。");
     document.getElementById("player2Name")?.focus();
     return false;
   }
   if (needP2 && !playerAvatars[2]) {
-    alert("請先為玩家 2 選擇角色。");
+    if (showAlert) alert("請先為玩家 2 選擇角色。");
     document.getElementById("player2Avatar")?.focus();
     return false;
   }
   return true;
+}
+
+function ensureProfilesReadyForCurrentContext(showAlert = true) {
+  let mode = gameMode;
+  let role = "auto";
+  if (mode === "online") {
+    role = myPlayerNumber === 1 ? "host" : myPlayerNumber === 2 ? "joiner" : "auto";
+  }
+  return validateProfilesForMode(mode, role, showAlert);
 }
 
 function resetForNewOnlineRoomAsHost() {
@@ -399,7 +408,6 @@ function createOnlineGame() {
     alert("請先設定 Firebase Realtime Database：請確認已啟用 Realtime Database，並在 firebase-config.js 設定 databaseURL。");
     return;
   }
-  if (!validateProfilesForMode("online", "host")) return;
   alert("正在建立線上對戰房間，請稍候…");
   resetForNewOnlineRoomAsHost();
   const code = generateGameCode();
@@ -424,6 +432,7 @@ function createOnlineGame() {
     document.getElementById("modeModalBackOnline").style.display = "none";
     alert("線上對戰已建立！房間代碼： " + code + "\n請把此代碼傳給家人，在「線上對戰 → 加入遊戲」輸入。");
     startOnlineListener();
+    ensureProfilesReadyForCurrentContext(true);
   }).catch((err) => {
     console.error("建立遊戲失敗", err);
     alert("建立遊戲失敗：" + (err.message || err));
@@ -437,7 +446,6 @@ function joinOnlineGame(code) {
     return;
   }
   const trimmed = String(code).trim().toUpperCase();
-  if (!validateProfilesForMode("online", "joiner")) return;
   if (trimmed.length !== 6) {
     document.getElementById("onlineJoinError").textContent = "請輸入 6 位代碼";
     document.getElementById("onlineJoinError").style.display = "block";
@@ -474,7 +482,7 @@ function joinOnlineGame(code) {
         },
         playerAvatars: {
           ...(current.playerAvatars || {}),
-          2: playerAvatars[2] || "liubei",
+          2: playerAvatars[2] || "",
         },
       };
     }, (err, committed, finalSnap) => {
@@ -493,6 +501,7 @@ function joinOnlineGame(code) {
       document.getElementById("onlineJoinError").style.display = "none";
       setStateFromSerialized(finalData);
       startOnlineListener();
+      ensureProfilesReadyForCurrentContext(true);
     }, false);
   }).catch((err) => {
     document.getElementById("onlineJoinError").textContent = "無法連線：" + (err.message || err);
@@ -599,6 +608,7 @@ function assignRandomAINameAndAvatar() {
   const ids = Object.keys(CHARACTERS);
   const avatarId = ids[Math.floor(Math.random() * ids.length)];
   playerNames[2] = name;
+  playerAvatars[2] = avatarId;
   const input2 = document.getElementById("player2Name");
   const select2 = document.getElementById("player2Avatar");
   if (input2) input2.value = name;
@@ -642,11 +652,12 @@ function renderAvatarPreview(playerNumber) {
   const preview = document.getElementById(previewId);
   if (!select || !preview) return;
 
-  const value = select.value || "liubei";
-  const char = CHARACTERS[value] || CHARACTERS.liubei;
-  if (!char) return;
-
   preview.innerHTML = "";
+  const value = (select.value || "").trim();
+  if (!value || !CHARACTERS[value]) {
+    return;
+  }
+  const char = CHARACTERS[value];
   const img = document.createElement("img");
   img.className = "avatar-image";
   img.alt = char.name;
@@ -783,6 +794,7 @@ function isInsideBoard(row, col) {
 
 function handleCellClick(row, col) {
   if (gameOver || isPaused) return;
+  if (!ensureProfilesReadyForCurrentContext(true)) return;
   if (gameMode === "vsAI" && activePlayer === 2) return;
   if (gameMode === "online" && activePlayer !== myPlayerNumber) return;
 
@@ -1791,12 +1803,12 @@ function setup() {
   const modeVsAIBtn = document.getElementById("modeVsAI");
   if (modeTwoPlayerBtn) {
     modeTwoPlayerBtn.addEventListener("click", () => {
-      if (!validateProfilesForMode("twoPlayer")) return;
       hideModeModal();
       gameMode = "twoPlayer";
       const cb = document.getElementById("ruleVsAI");
       if (cb) cb.checked = false;
       readRuleOptions();
+      ensureProfilesReadyForCurrentContext(true);
     });
   }
   if (modeVsAIBtn) {
@@ -1892,7 +1904,6 @@ function setup() {
 
   document.querySelectorAll(".ai-level").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (!validateProfilesForMode("vsAI")) return;
       const level = btn.getAttribute("data-level");
       if (level) {
         const select = document.getElementById("ruleAIDifficulty");
@@ -1905,6 +1916,7 @@ function setup() {
       if (cb) cb.checked = true;
       readRuleOptions();
       assignRandomAINameAndAvatar();
+      ensureProfilesReadyForCurrentContext(true);
     });
   });
 
@@ -1983,7 +1995,7 @@ function setup() {
       renderAvatarPreview(1);
       if (gameMode === "online") syncOnlineState();
     });
-    playerAvatars[1] = avatarSelect1.value || "liubei";
+    playerAvatars[1] = avatarSelect1.value || "";
     renderAvatarPreview(1);
   }
   if (avatarSelect2) {
@@ -1992,7 +2004,7 @@ function setup() {
       renderAvatarPreview(2);
       if (gameMode === "online") syncOnlineState();
     });
-    playerAvatars[2] = avatarSelect2.value || "liubei";
+    playerAvatars[2] = avatarSelect2.value || "";
     renderAvatarPreview(2);
   }
 
