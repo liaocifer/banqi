@@ -76,6 +76,7 @@ let onlineStateVersion = 0;
 let latestAppliedOnlineStateVersion = 0;
 let onlineSyncInFlight = false;
 let onlineSyncQueued = false;
+let onlineListenerRetryTimer = null;
 let debugLogs = [];
 
 function logDebug(event, data = {}) {
@@ -301,6 +302,7 @@ function setStateFromSerialized(data) {
     })
   );
   activePlayer = data.activePlayer ?? 1;
+  if (activePlayer !== 1 && activePlayer !== 2) activePlayer = 1;
   playerColors[1] = data.playerColors?.[1] ?? null;
   playerColors[2] = data.playerColors?.[2] ?? null;
   playerNames[1] = data.playerNames?.[1] ?? playerNames[1];
@@ -323,6 +325,14 @@ function setStateFromSerialized(data) {
   }
   selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
   chainCaptureActive = !!data.chainCaptureActive;
+  if (selectedCell) {
+    const p = board[selectedCell.row]?.[selectedCell.col]?.piece;
+    const currentColor = getCurrentPlayerColor();
+    if (!p || !p.faceUp || (currentColor && p.color !== currentColor)) {
+      selectedCell = null;
+      chainCaptureActive = false;
+    }
+  }
   pendingCaptureFly = null;
   if (gameOver && timerId !== null) {
     clearInterval(timerId);
@@ -598,6 +608,10 @@ function joinOnlineGame(code) {
 function startOnlineListener() {
   const db = getRealtimeDb();
   if (!db || !onlineGameId) return;
+  if (onlineListenerRetryTimer) {
+    clearTimeout(onlineListenerRetryTimer);
+    onlineListenerRetryTimer = null;
+  }
   if (firestoreUnsubscribe) firestoreUnsubscribe();
   const ref = db.ref(`banqi_games/${onlineGameId}`);
   const onValue = (snap) => {
@@ -613,7 +627,16 @@ function startOnlineListener() {
     if (myPlayerNumber === 1 && data.player2Id) hideModeModal();
     maybeStartOnlineRematchFromData(data);
   };
-  ref.on("value", onValue, (err) => console.warn("RTDB listener error", err));
+  ref.on("value", onValue, (err) => {
+    console.warn("RTDB listener error", err);
+    logDebug("listener_error", { message: String(err?.message || err) });
+    if (onlineListenerRetryTimer) clearTimeout(onlineListenerRetryTimer);
+    onlineListenerRetryTimer = setTimeout(() => {
+      if (gameMode === "online" && onlineGameId) {
+        startOnlineListener();
+      }
+    }, 1200);
+  });
   firestoreUnsubscribe = () => ref.off("value", onValue);
 }
 
@@ -653,6 +676,10 @@ function syncOnlineState() {
     if (err || !committed || !snap) {
       console.warn("Sync transaction failed", err);
       logDebug("sync_failed", { message: String(err?.message || err) });
+      onlineSyncQueued = true;
+      setTimeout(() => {
+        if (gameMode === "online" && onlineGameId) syncOnlineState();
+      }, 250);
     } else {
       const writtenVersion = Number(snap.val()?.stateVersion || 0);
       onlineStateVersion = Math.max(onlineStateVersion, writtenVersion);
@@ -719,6 +746,8 @@ function maybeStartOnlineRematchFromData(data) {
     if (!db || !onlineGameId) return;
 
     // Host starts the next round, keeping names/avatars/rules.
+    hideGameOverModal();
+    showRematchWaitingUI(false);
     initBoard();
     activePlayer = 1;
     playerColors = { 1: null, 2: null };
@@ -742,6 +771,10 @@ function leaveOnlineGame() {
   if (firestoreUnsubscribe) {
     firestoreUnsubscribe();
     firestoreUnsubscribe = null;
+  }
+  if (onlineListenerRetryTimer) {
+    clearTimeout(onlineListenerRetryTimer);
+    onlineListenerRetryTimer = null;
   }
   onlineGameId = null;
   myPlayerNumber = null;
@@ -1167,6 +1200,15 @@ function handleCellClick(row, col) {
   }
   if (gameMode === "vsAI" && activePlayer === 2) return;
   if (gameMode === "online" && activePlayer !== myPlayerNumber) return;
+
+  if (selectedCell) {
+    const selectedPiece = board[selectedCell.row]?.[selectedCell.col]?.piece;
+    const myColor = getCurrentPlayerColor();
+    if (!selectedPiece || !selectedPiece.faceUp || (myColor && selectedPiece.color !== myColor)) {
+      selectedCell = null;
+      chainCaptureActive = false;
+    }
+  }
 
   if (selectedCell) {
     if (selectedCell.row === row && selectedCell.col === col) {
