@@ -48,7 +48,6 @@ let moveHistory = []; // { player: 1|2, text: string }[]
 let timerId = null;
 let remainingSeconds = TURN_SECONDS;
 let turnEndsAt = Date.now() + TURN_SECONDS * 1000;
-let isPaused = false;
 
 const RECORD_KEY = "banqi-win-loss-record";
 let winRecord = { 1: 0, 2: 0 };
@@ -398,7 +397,11 @@ function setStateFromSerialized(data) {
       gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
     }
     const incomingTurnEndsAt = Number(data.turnEndsAt || 0);
-    if (incomingTurnEndsAt > 0) {
+    if (gameMode === "online" && prevActivePlayer !== activePlayer) {
+      // Keep online turns stable: each new turn should visibly start from 30 seconds.
+      turnEndsAt = Date.now() + TURN_SECONDS * 1000;
+      remainingSeconds = TURN_SECONDS;
+    } else if (incomingTurnEndsAt > 0) {
       turnEndsAt = incomingTurnEndsAt;
       remainingSeconds = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
     }
@@ -601,7 +604,6 @@ function resetForNewOnlineRoomAsHost() {
   }
   remainingSeconds = TURN_SECONDS;
   turnEndsAt = Date.now() + TURN_SECONDS * 1000;
-  isPaused = false;
   updateTimerDisplay();
 }
 
@@ -1319,8 +1321,6 @@ function startTimer(reset = true) {
     timerId = null;
   }
 
-  isPaused = false;
-
   if (reset) {
     turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   }
@@ -1334,9 +1334,6 @@ function startTimer(reset = true) {
       return;
     }
 
-    if (isPaused) {
-      return;
-    }
     remainingSeconds = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
     if (remainingSeconds <= 0) {
       clearInterval(timerId);
@@ -1355,7 +1352,7 @@ function isInsideBoard(row, col) {
 }
 
 function handleCellClick(row, col) {
-  if (gameOver || isPaused) return;
+  if (gameOver) return;
   if (gameMode === "vsAI" && activePlayer === 2) return;
   if (gameMode === "online" && activePlayer !== myPlayerNumber) {
     logDebug("click_blocked_not_my_turn", { row, col });
@@ -2359,7 +2356,6 @@ function restartGame() {
     clearInterval(timerId);
     timerId = null;
   }
-  isPaused = false;
   remainingSeconds = TURN_SECONDS;
   turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   readRuleOptions();
@@ -2664,15 +2660,6 @@ function setup() {
     renderAvatarPreview(2);
   }
   applyAllProfileDisplays();
-
-  const pauseBtn = document.getElementById("pauseBtn");
-  if (pauseBtn) {
-    pauseBtn.addEventListener("click", () => {
-      if (gameOver) return;
-      isPaused = !isPaused;
-      pauseBtn.textContent = isPaused ? "繼續遊戲" : "暫停計時";
-    });
-  }
 
   const bugReportBtn = document.getElementById("bugReportBtn");
   const bugLogModal = document.getElementById("bugLogModal");

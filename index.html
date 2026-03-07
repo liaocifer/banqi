@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <title>廖家暗棋大戰</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=0.5.4" />
     <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet" />
     <!-- 使用 jsDelivr（gstatic 在某些環境會 404） -->
     <script src="https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-app-compat.min.js"></script>
@@ -158,7 +158,6 @@
         <section class="panel panel-center">
           <div class="board-timer-bar">
             <div id="timer" class="timer"></div>
-            <button id="pauseBtn" class="btn btn-ghost">暫停計時</button>
           </div>
           <div id="status" class="status-text"></div>
           <section id="ruleOptions" class="rule-options">
@@ -210,18 +209,6 @@
             </div>
             <button id="bugReportBtn" class="btn btn-ghost" type="button">回報問題</button>
           </div>
-          <details class="rules">
-            <summary>玩法說明</summary>
-            <ul>
-              <li>棋盤為 4×8，共 32 枚棋子，開局全部蓋住並隨機擺放。</li>
-              <li>玩家 1 先翻任意一棋；該子的顏色就是玩家 1 的陣營，另一種顏色歸玩家 2。</li>
-              <li>輪到你時，可翻開一枚蓋住的棋子，或將自己的一枚明子沿上下左右走一格。</li>
-              <li>走到對方明子所在格為吃棋，依棋子階級比較，兵可以吃將／帥。</li>
-            </ul>
-            <p class="note">
-              「炮」吃棋須沿直線跳過一枚棋子；平移時路徑上不能有棋子。上方可勾選：暗棋連吃、車飛馬斜。
-            </p>
-          </details>
         </section>
 
         <!-- Player 2 panel (right) -->
@@ -260,6 +247,7 @@
           </section>
         </section>
       </main>
+      <footer class="app-footer">QA 支援：Angelfishie</footer>
     </div>
 
     <div id="bugLogModal" class="modal-overlay">
@@ -274,6 +262,6 @@
     </div>
 
     <script src="firebase-config.js"></script>
-    <script src="game.js?v=0.5.2" defer></script>
+    <script src="game.js?v=0.5.3" defer></script>
   </body>
 </html>
