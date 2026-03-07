@@ -242,6 +242,90 @@ function pieceFromSerializable(s) {
   };
 }
 
+function cellToPieceFromSerialized(cell) {
+  if (!cell) return null;
+  if (cell.p !== undefined) return pieceFromSerializable(cell.p);
+  if (cell.t && cell.c) return pieceFromSerializable(cell);
+  if (cell.piece) {
+    const p = cell.piece;
+    if (p.t && p.c) return pieceFromSerializable(p);
+    if (p.type && p.color) {
+      return pieceFromSerializable({ t: p.type, c: p.color, f: !!p.faceUp });
+    }
+  }
+  if (cell.type && cell.color) {
+    return pieceFromSerializable({ t: cell.type, c: cell.color, f: !!cell.faceUp });
+  }
+  return null;
+}
+
+function normalizeSerializedBoard(rawBoard) {
+  const result = Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => ({ piece: null }))
+  );
+
+  if (!rawBoard) return result;
+
+  // 1) 2D array: board[row][col]
+  if (Array.isArray(rawBoard) && rawBoard.length === ROWS && rawBoard.some((row) => row != null)) {
+    for (let r = 0; r < ROWS; r++) {
+      const row = rawBoard[r];
+      if (Array.isArray(row)) {
+        for (let c = 0; c < COLS; c++) {
+          result[r][c] = { piece: cellToPieceFromSerialized(row[c]) };
+        }
+      } else if (row && typeof row === "object") {
+        for (let c = 0; c < COLS; c++) {
+          result[r][c] = { piece: cellToPieceFromSerialized(row[c]) };
+        }
+      }
+    }
+    return result;
+  }
+
+  // 2) Flat array: board[row * COLS + col]
+  if (Array.isArray(rawBoard) && rawBoard.length === ROWS * COLS) {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idx = r * COLS + c;
+        result[r][c] = { piece: cellToPieceFromSerialized(rawBoard[idx]) };
+      }
+    }
+    return result;
+  }
+
+  // 3) Object map: { "r_c": cell } OR nested row object { "0": { "0": cell } }
+  if (rawBoard && typeof rawBoard === "object") {
+    const keys = Object.keys(rawBoard);
+    for (const key of keys) {
+      if (key.includes("_")) {
+        const [rs, cs] = key.split("_");
+        const r = Number(rs);
+        const c = Number(cs);
+        if (Number.isInteger(r) && Number.isInteger(c) && r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+          result[r][c] = { piece: cellToPieceFromSerialized(rawBoard[key]) };
+        }
+        continue;
+      }
+      const r = Number(key);
+      if (!Number.isInteger(r) || r < 0 || r >= ROWS) continue;
+      const row = rawBoard[key];
+      if (Array.isArray(row)) {
+        for (let c = 0; c < COLS; c++) {
+          result[r][c] = { piece: cellToPieceFromSerialized(row[c]) };
+        }
+      } else if (row && typeof row === "object") {
+        for (let c = 0; c < COLS; c++) {
+          result[r][c] = { piece: cellToPieceFromSerialized(row[c]) };
+        }
+      }
+    }
+    return result;
+  }
+
+  return result;
+}
+
 function getSerializedState() {
   const boardSer = board.map((row) =>
     row.map((cell) => ({ p: pieceToSerializable(cell?.piece) }))
@@ -282,26 +366,7 @@ function setStateFromSerialized(data) {
     }
     const prevActivePlayer = activePlayer;
     const prevGameOver = gameOver;
-    const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
-    board = data.board.map((row) =>
-      row.map((cell) => {
-        const p = cell?.p;
-        return {
-          piece: p ? (() => {
-            const t = typeInfo(p.t);
-            return {
-              type: p.t,
-              color: p.c,
-              faceUp: !!p.f,
-              name: t?.name ?? p.t,
-              short: t?.short ?? "?",
-              rank: t?.rank ?? 0,
-              captured: false,
-            };
-          })() : null,
-        };
-      })
-    );
+    board = normalizeSerializedBoard(data.board);
     activePlayer = data.activePlayer ?? 1;
     if (activePlayer !== 1 && activePlayer !== 2) activePlayer = 1;
     playerColors[1] = data.playerColors?.[1] ?? null;
