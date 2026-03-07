@@ -270,114 +270,119 @@ function getSerializedState() {
 }
 
 function setStateFromSerialized(data) {
-  if (!data || !data.board) return;
-  const incomingVersion = Number(data.stateVersion || 0);
-  if (incomingVersion && incomingVersion < latestAppliedOnlineStateVersion) {
-    return;
-  }
-  if (incomingVersion) {
-    latestAppliedOnlineStateVersion = incomingVersion;
-    onlineStateVersion = Math.max(onlineStateVersion, incomingVersion);
-  }
-  const prevActivePlayer = activePlayer;
-  const prevGameOver = gameOver;
-  const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
-  board = data.board.map((row) =>
-    row.map((cell) => {
-      const p = cell?.p;
-      return {
-        piece: p ? (() => {
-          const t = typeInfo(p.t);
-          return {
-            type: p.t,
-            color: p.c,
-            faceUp: !!p.f,
-            name: t?.name ?? p.t,
-            short: t?.short ?? "?",
-            rank: t?.rank ?? 0,
-            captured: false,
-          };
-        })() : null,
-      };
-    })
-  );
-  activePlayer = data.activePlayer ?? 1;
-  if (activePlayer !== 1 && activePlayer !== 2) activePlayer = 1;
-  playerColors[1] = data.playerColors?.[1] ?? null;
-  playerColors[2] = data.playerColors?.[2] ?? null;
-  playerNames[1] = data.playerNames?.[1] ?? playerNames[1];
-  playerNames[2] = data.playerNames?.[2] ?? playerNames[2];
-  playerAvatars[1] = data.playerAvatars?.[1] ?? playerAvatars[1];
-  playerAvatars[2] = data.playerAvatars?.[2] ?? playerAvatars[2];
-  moveHistory = data.moveHistory ? data.moveHistory.slice() : [];
-  capturedPieces.red = (data.capturedPieces?.red || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
-  capturedPieces.black = (data.capturedPieces?.black || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
-  const incomingGameOver = !!data.gameOver;
-  gameOver = incomingGameOver;
-  lastWinnerPlayer = data.lastWinnerPlayer ?? lastWinnerPlayer;
-  onlineRematchState = {
-    p1: !!data.rematch?.p1,
-    p2: !!data.rematch?.p2,
-  };
-  if (data.gameRules) {
-    gameRules.anqiChain = !!data.gameRules.anqiChain;
-    gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
-  }
-  selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
-  chainCaptureActive = !!data.chainCaptureActive;
-  if (selectedCell) {
-    const p = board[selectedCell.row]?.[selectedCell.col]?.piece;
-    const currentColor = getCurrentPlayerColor();
-    if (!p || !p.faceUp || (currentColor && p.color !== currentColor)) {
-      selectedCell = null;
-      chainCaptureActive = false;
+  try {
+    if (!data || !data.board) return;
+    const incomingVersion = Number(data.stateVersion || 0);
+    if (incomingVersion && incomingVersion < latestAppliedOnlineStateVersion) {
+      return;
     }
-  }
-  pendingCaptureFly = null;
-  if (gameOver && timerId !== null) {
-    clearInterval(timerId);
-    timerId = null;
-  }
-  logDebug("apply_snapshot", {
-    incomingVersion,
-    incomingActivePlayer: data.activePlayer ?? null,
-    incomingGameOver,
-    rematchP1: !!data.rematch?.p1,
-    rematchP2: !!data.rematch?.p2,
-  });
+    if (incomingVersion) {
+      latestAppliedOnlineStateVersion = incomingVersion;
+      onlineStateVersion = Math.max(onlineStateVersion, incomingVersion);
+    }
+    const prevActivePlayer = activePlayer;
+    const prevGameOver = gameOver;
+    const typeInfo = (key) => PIECE_TYPES.find((x) => x.key === key);
+    board = data.board.map((row) =>
+      row.map((cell) => {
+        const p = cell?.p;
+        return {
+          piece: p ? (() => {
+            const t = typeInfo(p.t);
+            return {
+              type: p.t,
+              color: p.c,
+              faceUp: !!p.f,
+              name: t?.name ?? p.t,
+              short: t?.short ?? "?",
+              rank: t?.rank ?? 0,
+              captured: false,
+            };
+          })() : null,
+        };
+      })
+    );
+    activePlayer = data.activePlayer ?? 1;
+    if (activePlayer !== 1 && activePlayer !== 2) activePlayer = 1;
+    playerColors[1] = data.playerColors?.[1] ?? null;
+    playerColors[2] = data.playerColors?.[2] ?? null;
+    playerNames[1] = data.playerNames?.[1] ?? playerNames[1];
+    playerNames[2] = data.playerNames?.[2] ?? playerNames[2];
+    playerAvatars[1] = data.playerAvatars?.[1] ?? playerAvatars[1];
+    playerAvatars[2] = data.playerAvatars?.[2] ?? playerAvatars[2];
+    moveHistory = data.moveHistory ? data.moveHistory.slice() : [];
+    capturedPieces.red = (data.capturedPieces?.red || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
+    capturedPieces.black = (data.capturedPieces?.black || []).map((p) => pieceFromSerializable(p)).filter(Boolean);
+    const incomingGameOver = !!data.gameOver;
+    gameOver = incomingGameOver;
+    lastWinnerPlayer = data.lastWinnerPlayer ?? lastWinnerPlayer;
+    onlineRematchState = {
+      p1: !!data.rematch?.p1,
+      p2: !!data.rematch?.p2,
+    };
+    if (data.gameRules) {
+      gameRules.anqiChain = !!data.gameRules.anqiChain;
+      gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
+    }
+    selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
+    chainCaptureActive = !!data.chainCaptureActive;
+    if (selectedCell) {
+      const p = board[selectedCell.row]?.[selectedCell.col]?.piece;
+      const currentColor = getCurrentPlayerColor();
+      if (!p || !p.faceUp || (currentColor && p.color !== currentColor)) {
+        selectedCell = null;
+        chainCaptureActive = false;
+      }
+    }
+    pendingCaptureFly = null;
+    if (gameOver && timerId !== null) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    logDebug("apply_snapshot", {
+      incomingVersion,
+      incomingActivePlayer: data.activePlayer ?? null,
+      incomingGameOver,
+      rematchP1: !!data.rematch?.p1,
+      rematchP2: !!data.rematch?.p2,
+    });
 
-  const input1 = document.getElementById("player1Name");
-  const input2 = document.getElementById("player2Name");
-  if (input1) input1.value = playerNames[1] || "";
-  if (input2) input2.value = playerNames[2] || "";
+    const input1 = document.getElementById("player1Name");
+    const input2 = document.getElementById("player2Name");
+    if (input1) input1.value = playerNames[1] || "";
+    if (input2) input2.value = playerNames[2] || "";
 
-  const avatarSelect1 = document.getElementById("player1Avatar");
-  const avatarSelect2 = document.getElementById("player2Avatar");
-  if (avatarSelect1) avatarSelect1.value = playerAvatars[1] || "";
-  if (avatarSelect2) avatarSelect2.value = playerAvatars[2] || "";
+    const avatarSelect1 = document.getElementById("player1Avatar");
+    const avatarSelect2 = document.getElementById("player2Avatar");
+    if (avatarSelect1) avatarSelect1.value = playerAvatars[1] || "";
+    if (avatarSelect2) avatarSelect2.value = playerAvatars[2] || "";
 
-  if (gameMode === "online") {
-    if (playerNames[1] && playerAvatars[1]) profileLocked[1] = true;
-    if (playerNames[2] && playerAvatars[2]) profileLocked[2] = true;
-  }
-  applyAllProfileDisplays();
-  renderAvatarPreview(1);
-  renderAvatarPreview(2);
+    if (gameMode === "online") {
+      if (playerNames[1] && playerAvatars[1]) profileLocked[1] = true;
+      if (playerNames[2] && playerAvatars[2]) profileLocked[2] = true;
+    }
+    applyAllProfileDisplays();
+    renderAvatarPreview(1);
+    renderAvatarPreview(2);
 
-  renderBoard();
-  renderHistory();
-  updateStatus();
-  updateRuleOptionsDisabled();
+    renderBoard();
+    renderHistory();
+    updateStatus();
+    updateRuleOptionsDisabled();
 
-  if (!gameOver && prevActivePlayer !== activePlayer) {
-    startTimer(true);
-  }
-  if (gameOver && !prevGameOver) {
-    showGameOverModal(lastWinnerPlayer);
-  }
-  if (!gameOver && prevGameOver) {
-    hideGameOverModal();
-    startTimer(true);
+    if (!gameOver && prevActivePlayer !== activePlayer) {
+      startTimer(true);
+    }
+    if (gameOver && !prevGameOver) {
+      showGameOverModal(lastWinnerPlayer);
+    }
+    if (!gameOver && prevGameOver) {
+      hideGameOverModal();
+      startTimer(true);
+    }
+  } catch (e) {
+    logDebug("apply_snapshot_error", { message: String(e?.message || e) });
+    console.error("setStateFromSerialized failed", e);
   }
 }
 
@@ -1196,10 +1201,14 @@ function handleCellClick(row, col) {
   if (gameOver || isPaused) return;
   if (!ensureProfilesReadyForCurrentContext(false)) {
     showTemporaryStatus("請先完成玩家名稱與角色設定。", "status-warning");
+    logDebug("click_blocked_profile");
     return;
   }
   if (gameMode === "vsAI" && activePlayer === 2) return;
-  if (gameMode === "online" && activePlayer !== myPlayerNumber) return;
+  if (gameMode === "online" && activePlayer !== myPlayerNumber) {
+    logDebug("click_blocked_not_my_turn", { row, col });
+    return;
+  }
 
   if (selectedCell) {
     const selectedPiece = board[selectedCell.row]?.[selectedCell.col]?.piece;
