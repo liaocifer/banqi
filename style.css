@@ -636,6 +636,8 @@ body {
   cursor: pointer;
   transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.2s ease;
   box-shadow: 0 8px 20px rgba(56, 189, 248, 0.45);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn:hover {
@@ -713,6 +715,8 @@ body {
   cursor: pointer;
   user-select: none;
   transition: transform 0.08s ease, box-shadow 0.08s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .cell:nth-child(8n) {
   border-right: none;
@@ -958,4 +962,241 @@ body {
 
 .history-list li + li {
   margin-top: 2px;
+}
+
+/* ========== Mobile & iPhone optimizations ========== */
+@media (max-width: 768px) {
+  body {
+    min-height: 100dvh;
+    min-height: 100vh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .app {
+    padding: 12px;
+    max-width: 100%;
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .main {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  /* Center (board) first on mobile so game is visible without scrolling */
+  .main .panel-center {
+    order: 0;
+  }
+  .main .panel-player1 {
+    order: 1;
+  }
+  .main .panel-player2 {
+    order: 2;
+  }
+
+  .header h1 {
+    font-size: 1.4rem;
+  }
+
+  .panel {
+    padding: 12px 14px;
+  }
+
+  .panel-player {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .panel-player .player-field label,
+  .panel-player .avatar-control label {
+    font-size: 0.95rem;
+  }
+
+  .player-identity {
+    font-size: 1.35rem;
+  }
+
+  .record-display {
+    font-size: 0.95rem;
+  }
+
+  .player-input,
+  .panel-player .avatar-control,
+  .player-field {
+    font-size: 1rem;
+  }
+
+  .player-input {
+    padding: 10px 12px;
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+
+  .avatar-select {
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+
+  .avatar-preview img.avatar-image {
+    width: 100px;
+    height: 100px;
+  }
+
+  .avatar-badge {
+    padding: 4px 12px;
+    font-size: 0.9rem;
+  }
+
+  .board-timer-bar {
+    padding: 8px 12px;
+  }
+
+  .timer {
+    font-size: 1.1rem;
+  }
+
+  .panel-center .status-text {
+    font-size: 0.9rem;
+    min-height: 1.8em;
+  }
+
+  .board {
+    max-width: 100%;
+    border-width: 2px;
+  }
+
+  .piece-name {
+    font-size: 1.6rem;
+  }
+
+  .captured-pieces {
+    max-width: 100%;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .captured-pieces .piece-captured {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    font-size: 0.55rem;
+  }
+
+  .board-controls {
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .board-controls .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-surrender {
+    min-height: 44px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .history-panel {
+    margin-top: 8px;
+    padding-top: 6px;
+  }
+
+  .history-title {
+    font-size: 0.85rem;
+  }
+
+  .history-body {
+    height: 200px;
+    max-height: 200px;
+    min-height: 200px;
+    font-size: 0.8rem;
+  }
+
+  .panel-player .btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 1rem;
+  }
+}
+
+/* Modals: full-bleed on small screens, safe area, larger tap targets */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    align-items: flex-start;
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .modal-box {
+    max-width: none;
+    width: calc(100% - 24px);
+    margin: 12px;
+    padding: 24px 20px;
+    border-radius: 12px;
+  }
+
+  .modal-title {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+  }
+
+  .modal-message {
+    font-size: 1rem;
+    margin-bottom: 20px;
+  }
+
+  .modal-actions .btn,
+  .btn-modal,
+  .btn-ghost {
+    min-height: 48px;
+    padding: 14px 20px;
+    font-size: 1rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Small phones: tighter layout, board fits screen */
+@media (max-width: 480px) {
+  .app {
+    padding: 8px;
+  }
+
+  .header h1 {
+    font-size: 1.2rem;
+  }
+
+  .panel-player {
+    padding: 10px 12px;
+  }
+
+  .avatar-preview img.avatar-image {
+    width: 80px;
+    height: 80px;
+  }
+
+  .piece-name {
+    font-size: 1.35rem;
+  }
+
+  .history-body {
+    height: 160px;
+    max-height: 160px;
+    min-height: 160px;
+  }
+
+  .game-over-box .modal-message {
+    font-size: 0.95rem;
+  }
 }
