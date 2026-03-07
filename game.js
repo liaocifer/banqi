@@ -1271,8 +1271,9 @@ function renderHistory() {
     }
     const list = document.createElement("ol");
     list.className = "history-list";
-    entries.forEach((text) => {
+    entries.forEach((text, idx) => {
       const li = document.createElement("li");
+      li.value = idx + 1;
       li.textContent = text;
       list.appendChild(li);
     });
@@ -1281,6 +1282,8 @@ function renderHistory() {
 
   fillList(history1El, entries1);
   fillList(history2El, entries2);
+  history1El.scrollTop = history1El.scrollHeight;
+  history2El.scrollTop = history2El.scrollHeight;
 }
 
 function updateTimerDisplay() {

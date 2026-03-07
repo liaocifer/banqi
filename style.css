@@ -141,7 +141,7 @@ body {
 
 .app {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1450px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -219,7 +219,7 @@ body {
 /* Three columns: player1 | center (timer + board + instructions) | player2 */
 .main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 720px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 720px) minmax(0, 1.5fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -242,18 +242,19 @@ body {
 .panel-player {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
   height: 100%;
+  padding: 18px 21px;
 }
 
 .panel-player1 {
-  border-left: 3px solid rgba(148, 163, 184, 0.45);
+  border-left: 5px solid rgba(148, 163, 184, 0.45);
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .panel-player2 {
-  border-right: 3px solid rgba(148, 163, 184, 0.45);
+  border-right: 5px solid rgba(148, 163, 184, 0.45);
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
@@ -300,14 +301,14 @@ body {
 }
 
 .record-display {
-  font-size: 0.85rem;
+  font-size: 1.275rem;
   color: #9ca3af;
   margin-top: 2px;
 }
 .player-identity {
   margin-top: 2px;
   margin-bottom: 4px;
-  font-size: 1.25rem;
+  font-size: 1.875rem;
   line-height: 1.2;
   color: #f8fafc;
   font-weight: 700;
@@ -320,7 +321,7 @@ body {
 
 .panel-player .player-field label,
 .panel-player .avatar-control label {
-  font-size: 0.8rem;
+  font-size: 1.2rem;
   color: #9ca3af;
 }
 
@@ -503,17 +504,17 @@ body {
 .player-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
+  gap: 6px;
+  font-size: 1.275rem;
 }
 
 .player-input {
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 9px 15px;
+  border-radius: 12px;
   border: 1px solid #4b5563;
   background: #020617;
   color: #e5e7eb;
-  font-size: 0.85rem;
+  font-size: 1.275rem;
 }
 
 .player-input:focus {
@@ -526,17 +527,17 @@ body {
   margin-top: 4px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.8rem;
+  gap: 6px;
+  font-size: 1.2rem;
 }
 
 .avatar-select {
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
   border: 1px solid #4b5563;
   background: #020617;
   color: #e5e7eb;
-  font-size: 0.85rem;
+  font-size: 1.275rem;
 }
 
 .avatar-select:focus {
@@ -555,8 +556,8 @@ body {
 }
 
 .avatar-preview img.avatar-image {
-  width: 144px;
-  height: 144px;
+  width: 216px;
+  height: 216px;
   border-radius: 50%;
   object-fit: cover;
   object-position: center 22%;
@@ -569,9 +570,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 12px;
+  padding: 6px 18px;
   border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: 1.275rem;
   font-weight: 600;
   color: #f9fafb;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.65);
@@ -868,7 +869,12 @@ body {
 
 .btn-surrender {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 12px;
+}
+
+.panel-player .btn {
+  padding: 9px 18px;
+  font-size: 1.35rem;
 }
 
 .cell.selected .piece {
@@ -918,30 +924,36 @@ body {
   margin-top: 12px;
   padding-top: 8px;
   border-top: 1px solid rgba(148, 163, 184, 0.35);
-  flex: 1;
+  flex: none;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .history-title {
   margin: 0 0 6px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: #e5e7eb;
 }
 
 .history-body {
+  height: 360px;
+  max-height: 360px;
+  min-height: 360px;
   overflow-y: auto;
   padding-right: 4px;
-  font-size: 0.75rem;
-  flex: 1;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  flex: none;
   min-height: 0;
 }
 
 .history-list {
   list-style: decimal;
+  list-style-position: outside;
   margin: 0;
-  padding-left: 1.2rem;
+  padding-left: 2rem;
 }
 
 .history-list li + li {
