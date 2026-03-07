@@ -326,10 +326,21 @@ function setStateFromSerialized(data) {
     }
     selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
     chainCaptureActive = !!data.chainCaptureActive;
+    if (prevActivePlayer !== activePlayer) {
+      // Turn switched: never carry over stale chain/selection from previous player.
+      selectedCell = null;
+      chainCaptureActive = false;
+    }
     if (selectedCell) {
       const p = board[selectedCell.row]?.[selectedCell.col]?.piece;
       const currentColor = getCurrentPlayerColor();
       if (!p || !p.faceUp || (currentColor && p.color !== currentColor)) {
+        selectedCell = null;
+        chainCaptureActive = false;
+      }
+    }
+    if (chainCaptureActive) {
+      if (!selectedCell || !canPieceCaptureAgain(selectedCell.row, selectedCell.col)) {
         selectedCell = null;
         chainCaptureActive = false;
       }
@@ -1199,11 +1210,6 @@ function isInsideBoard(row, col) {
 
 function handleCellClick(row, col) {
   if (gameOver || isPaused) return;
-  if (!ensureProfilesReadyForCurrentContext(false)) {
-    showTemporaryStatus("請先完成玩家名稱與角色設定。", "status-warning");
-    logDebug("click_blocked_profile");
-    return;
-  }
   if (gameMode === "vsAI" && activePlayer === 2) return;
   if (gameMode === "online" && activePlayer !== myPlayerNumber) {
     logDebug("click_blocked_not_my_turn", { row, col });
