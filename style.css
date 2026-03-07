@@ -983,16 +983,20 @@ body {
   }
 
   .main {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      "center center"
+      "p1 p2";
     flex: 1 1 0%;
     min-height: 0;
-    gap: 8px;
+    gap: 6px;
   }
 
-  /* Board first and takes most space */
+  /* Board full width on top */
   .main .panel-center {
-    order: 0;
+    grid-area: center;
     flex: 1 1 0%;
     min-height: 0;
     display: flex;
@@ -1064,10 +1068,12 @@ body {
   }
 
   .main .panel-player1 {
-    order: 1;
+    grid-area: p1;
+    min-width: 0;
   }
   .main .panel-player2 {
-    order: 2;
+    grid-area: p2;
+    min-width: 0;
   }
 
   .header {
@@ -1086,10 +1092,10 @@ body {
     padding: 8px 10px;
   }
 
-  /* Compact player panels: minimal height so board gets space */
+  /* Compact player panels side by side: one row under board */
   .panel-player {
-    padding: 6px 10px;
-    gap: 4px;
+    padding: 4px 6px;
+    gap: 2px;
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -1102,62 +1108,74 @@ body {
 
   .panel-player .player-field label,
   .panel-player .avatar-control label {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
   }
 
   .panel-player .player-input,
   .panel-player .avatar-select {
-    padding: 6px 8px;
-    font-size: 16px;
-    min-height: 36px;
+    padding: 4px 6px;
+    font-size: 16px; /* 16px avoids iOS zoom on focus */
+    min-height: 28px;
   }
 
   .panel-player .avatar-preview {
-    margin-top: 2px;
+    margin-top: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
   }
 
   .panel-player .avatar-preview img.avatar-image {
-    width: 44px;
-    height: 44px;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
   }
 
   .panel-player .avatar-badge {
-    padding: 2px 8px;
-    font-size: 0.75rem;
+    padding: 2px 6px;
+    font-size: 0.65rem;
   }
 
   .panel-player .player-identity {
-    font-size: 1rem;
-    margin: 0 0 2px;
+    font-size: 0.85rem;
+    margin: 0;
+    line-height: 1.2;
   }
 
   .panel-player .record-display {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     margin: 0;
   }
 
   .panel-player .btn-surrender {
-    margin-top: 4px;
-    min-height: 36px;
-    padding: 6px 10px;
-    font-size: 0.8rem;
+    margin-top: 2px;
+    min-height: 28px;
+    padding: 4px 6px;
+    font-size: 0.7rem;
   }
 
   .panel-player .history-panel {
-    margin-top: 4px;
-    padding-top: 4px;
+    margin-top: 2px;
+    padding-top: 2px;
     border-top-width: 1px;
   }
 
   .panel-player .history-title {
-    font-size: 0.75rem;
-    margin: 0 0 2px;
+    font-size: 0.65rem;
+    margin: 0 0 1px;
   }
 
   .panel-player .history-body {
-    height: 72px;
-    max-height: 72px;
-    min-height: 72px;
+    height: 48px;
+    max-height: 48px;
+    min-height: 48px;
+    font-size: 0.6rem;
+  }
+
+  .panel-player .btn {
+    min-height: 28px;
+    padding: 4px 6px;
     font-size: 0.7rem;
   }
 
@@ -1250,17 +1268,152 @@ body {
   }
 
   .panel-player .avatar-preview img.avatar-image {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
   }
 
   .panel-player .history-body {
-    height: 60px;
-    max-height: 60px;
-    min-height: 60px;
+    height: 40px;
+    max-height: 40px;
+    min-height: 40px;
   }
 
   .game-over-box .modal-message {
     font-size: 0.95rem;
+  }
+}
+
+/* ========== Landscape (horizontal): fit short viewport ========== */
+@media (max-width: 768px) and (orientation: landscape) {
+  body {
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .app {
+    padding: 6px;
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+
+  .header h1 {
+    font-size: 1rem;
+  }
+
+  .main {
+    grid-template-rows: 1fr auto;
+    gap: 4px;
+  }
+
+  .main .panel-center {
+    padding: 4px 8px;
+    min-height: 0;
+  }
+
+  .main .panel-center .board-timer-bar {
+    padding: 4px 8px;
+  }
+
+  .main .panel-center .status-text {
+    min-height: 1.4em;
+    font-size: 0.8rem;
+  }
+
+  .main .panel-center #ruleOptions {
+    padding: 2px 0;
+  }
+
+  .main .panel-center #ruleOptions .rule-options-title {
+    margin: 0 0 2px;
+    font-size: 0.7rem;
+  }
+
+  /* Board: cap height so layout fits in short landscape viewport */
+  .main .panel-center .board {
+    min-height: 0;
+    max-height: 42vh;
+    flex: 1 1 auto;
+    aspect-ratio: 8 / 4;
+  }
+
+  .main .panel-center #captured-pieces {
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    margin-top: 2px;
+  }
+
+  .main .panel-center .board-controls {
+    margin-top: 4px;
+    gap: 4px;
+  }
+
+  .main .panel-center .board-controls .btn {
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .piece-name {
+    font-size: 1.1rem;
+  }
+
+  .panel-player {
+    padding: 3px 5px;
+  }
+
+  .panel-player .avatar-preview img.avatar-image {
+    width: 28px;
+    height: 28px;
+  }
+
+  .panel-player .player-identity {
+    font-size: 0.75rem;
+  }
+
+  .panel-player .record-display {
+    font-size: 0.6rem;
+  }
+
+  .panel-player .btn-surrender {
+    min-height: 24px;
+    padding: 2px 4px;
+    font-size: 0.65rem;
+  }
+
+  .panel-player .history-panel {
+    margin-top: 2px;
+    padding-top: 2px;
+  }
+
+  .panel-player .history-title {
+    font-size: 0.6rem;
+  }
+
+  .panel-player .history-body {
+    height: 36px;
+    max-height: 36px;
+    min-height: 36px;
+    font-size: 0.55rem;
+  }
+
+  .app-footer {
+    font-size: 0.7rem;
+  }
+}
+
+/* Landscape on very short viewport (e.g. small phone) */
+@media (max-width: 768px) and (orientation: landscape) and (max-height: 400px) {
+  .main .panel-center .board {
+    max-height: 38vh;
+  }
+
+  .header h1 {
+    font-size: 0.9rem;
+  }
+
+  .panel-player .history-body {
+    height: 28px;
+    max-height: 28px;
+    min-height: 28px;
   }
 }
