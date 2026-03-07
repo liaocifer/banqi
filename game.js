@@ -34,6 +34,7 @@ const PIECE_LABELS = {
 };
 
 const COLORS = ["red", "black"];
+const TURN_SECONDS = 30;
 
 let board = [];
 let activePlayer = 1; // 1 or 2
@@ -45,7 +46,8 @@ let playerNames = { 1: "", 2: "" };
 let playerAvatars = { 1: "", 2: "" };
 let moveHistory = []; // { player: 1|2, text: string }[]
 let timerId = null;
-let remainingSeconds = 30;
+let remainingSeconds = TURN_SECONDS;
+let turnEndsAt = Date.now() + TURN_SECONDS * 1000;
 let isPaused = false;
 
 const RECORD_KEY = "banqi-win-loss-record";
@@ -78,6 +80,7 @@ let onlineSyncInFlight = false;
 let onlineSyncQueued = false;
 let onlineListenerRetryTimer = null;
 let debugLogs = [];
+let winCelebrationTimerId = null;
 
 function logDebug(event, data = {}) {
   const ts = new Date().toISOString();
@@ -346,6 +349,11 @@ function getSerializedState() {
       p1: !!onlineRematchState.p1,
       p2: !!onlineRematchState.p2,
     },
+    records: {
+      win: { 1: winRecord[1] || 0, 2: winRecord[2] || 0 },
+      loss: { 1: lossRecord[1] || 0, 2: lossRecord[2] || 0 },
+    },
+    turnEndsAt: Number(turnEndsAt || 0),
     stateVersion: onlineStateVersion || 0,
     gameRules: { anqiChain: gameRules.anqiChain, carHorseSpecial: gameRules.carHorseSpecial },
     selectedCell: selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null,
@@ -388,6 +396,22 @@ function setStateFromSerialized(data) {
     if (data.gameRules) {
       gameRules.anqiChain = !!data.gameRules.anqiChain;
       gameRules.carHorseSpecial = !!data.gameRules.carHorseSpecial;
+    }
+    const incomingTurnEndsAt = Number(data.turnEndsAt || 0);
+    if (incomingTurnEndsAt > 0) {
+      turnEndsAt = incomingTurnEndsAt;
+      remainingSeconds = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
+    }
+    if (data.records) {
+      winRecord = {
+        1: Number(data.records?.win?.[1] ?? winRecord[1] ?? 0),
+        2: Number(data.records?.win?.[2] ?? winRecord[2] ?? 0),
+      };
+      lossRecord = {
+        1: Number(data.records?.loss?.[1] ?? lossRecord[1] ?? 0),
+        2: Number(data.records?.loss?.[2] ?? lossRecord[2] ?? 0),
+      };
+      renderRecord();
     }
     selectedCell = data.selectedCell ? { row: data.selectedCell.row, col: data.selectedCell.col } : null;
     chainCaptureActive = !!data.chainCaptureActive;
@@ -446,8 +470,12 @@ function setStateFromSerialized(data) {
     updateStatus();
     updateRuleOptionsDisabled();
 
-    if (!gameOver && prevActivePlayer !== activePlayer) {
-      startTimer(true);
+    if (!gameOver) {
+      if (gameMode === "online") {
+        startTimer(false);
+      } else if (prevActivePlayer !== activePlayer) {
+        startTimer(true);
+      }
     }
     if (gameOver && !prevGameOver) {
       showGameOverModal(lastWinnerPlayer);
@@ -571,7 +599,8 @@ function resetForNewOnlineRoomAsHost() {
     clearInterval(timerId);
     timerId = null;
   }
-  remainingSeconds = 30;
+  remainingSeconds = TURN_SECONDS;
+  turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   isPaused = false;
   updateTimerDisplay();
 }
@@ -1116,6 +1145,11 @@ function showGameOverModal(winnerPlayer) {
   if (cancelWaitBtn) cancelWaitBtn.style.display = "none";
   onlineRematchWaiting = false;
   if (modal) modal.classList.add("modal-open");
+  if (winnerPlayer) {
+    startWinCelebration();
+  } else {
+    stopWinCelebration();
+  }
 }
 
 function hideGameOverModal() {
@@ -1125,7 +1159,57 @@ function hideGameOverModal() {
   if (waitEl) waitEl.style.display = "none";
   if (cancelWaitBtn) cancelWaitBtn.style.display = "none";
   onlineRematchWaiting = false;
+  stopWinCelebration();
   if (modal) modal.classList.remove("modal-open");
+}
+
+function launchWinFireworkBurst() {
+  const layer = document.getElementById("gameOverFireworks");
+  if (!layer) return;
+  const colors = ["#f59e0b", "#ef4444", "#22c55e", "#38bdf8", "#a78bfa"];
+  const count = 18;
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement("span");
+    dot.className = "firework-dot";
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 35 + Math.random() * 80;
+    const dx = Math.cos(angle) * distance;
+    const dy = Math.sin(angle) * distance;
+    dot.style.setProperty("--fx", `${dx.toFixed(2)}px`);
+    dot.style.setProperty("--fy", `${dy.toFixed(2)}px`);
+    dot.style.left = `${20 + Math.random() * 60}%`;
+    dot.style.top = `${20 + Math.random() * 55}%`;
+    dot.style.background = colors[Math.floor(Math.random() * colors.length)];
+    layer.appendChild(dot);
+    setTimeout(() => dot.remove(), 900);
+  }
+}
+
+function startWinCelebration() {
+  stopWinCelebration();
+  const layer = document.getElementById("gameOverFireworks");
+  if (!layer) return;
+  layer.classList.add("active");
+  let bursts = 0;
+  launchWinFireworkBurst();
+  winCelebrationTimerId = setInterval(() => {
+    bursts += 1;
+    launchWinFireworkBurst();
+    if (bursts >= 7) {
+      stopWinCelebration();
+    }
+  }, 380);
+}
+
+function stopWinCelebration() {
+  if (winCelebrationTimerId !== null) {
+    clearInterval(winCelebrationTimerId);
+    winCelebrationTimerId = null;
+  }
+  const layer = document.getElementById("gameOverFireworks");
+  if (!layer) return;
+  layer.classList.remove("active");
+  layer.innerHTML = "";
 }
 
 function renderAvatarPreview(playerNumber) {
@@ -1238,8 +1322,9 @@ function startTimer(reset = true) {
   isPaused = false;
 
   if (reset) {
-    remainingSeconds = 30;
+    turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   }
+  remainingSeconds = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
   updateTimerDisplay();
 
   timerId = setInterval(() => {
@@ -1252,11 +1337,7 @@ function startTimer(reset = true) {
     if (isPaused) {
       return;
     }
-    if (gameMode === "online" && myPlayerNumber && activePlayer !== myPlayerNumber) {
-      return;
-    }
-
-    remainingSeconds -= 1;
+    remainingSeconds = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
     if (remainingSeconds <= 0) {
       clearInterval(timerId);
       timerId = null;
@@ -1870,12 +1951,13 @@ function canPieceCaptureAgain(r, c) {
 function endTurn() {
   const fromPlayer = activePlayer;
   activePlayer = activePlayer === 1 ? 2 : 1;
+  turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   selectedCell = null;
   chainCaptureActive = false;
   renderBoard();
   updateStatus();
   logDebug("end_turn", { fromPlayer, toPlayer: activePlayer });
-  startTimer();
+  startTimer(false);
   if (gameMode === "online") syncOnlineState();
   if (gameMode === "vsAI" && activePlayer === 2 && !gameOver) {
     if (aiTurnTimeoutId) clearTimeout(aiTurnTimeoutId);
@@ -2278,7 +2360,8 @@ function restartGame() {
     timerId = null;
   }
   isPaused = false;
-  remainingSeconds = 30;
+  remainingSeconds = TURN_SECONDS;
+  turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   readRuleOptions();
   updateRuleOptionsDisabled();
   renderBoard();
@@ -2293,6 +2376,7 @@ function setup() {
   renderBoard();
   updateStatus();
   renderHistory();
+  turnEndsAt = Date.now() + TURN_SECONDS * 1000;
   updateTimerDisplay();
 
   const modeTwoPlayerBtn = document.getElementById("modeTwoPlayer");

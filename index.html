@@ -102,7 +102,8 @@
 
     <!-- Game over popup -->
     <div id="gameOverModal" class="modal-overlay">
-      <div class="modal-box">
+      <div class="modal-box game-over-box">
+        <div id="gameOverFireworks" class="fireworks-layer" aria-hidden="true"></div>
         <p id="gameOverMessage" class="modal-message"></p>
         <button type="button" id="gameOverAgain" class="btn btn-modal">再來一局</button>
         <button type="button" id="gameOverEnd" class="btn btn-ghost">結束比賽</button>
@@ -273,6 +274,6 @@
     </div>
 
     <script src="firebase-config.js"></script>
-    <script src="game.js?v=0.5.1" defer></script>
+    <script src="game.js?v=0.5.2" defer></script>
   </body>
 </html>
